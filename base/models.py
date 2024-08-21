@@ -28,17 +28,25 @@ class CustomUserManager(BaseUserManager):
 
 
 
+AUTH_PROVIDERS = {'email': 'email', 'google': 'google', 'github': 'github', 'linkedin': 'linkedin'}
 
-
-AUTH_PROVIDERS ={'email':'email', 'google':'google', 'github':'github', 'linkedin':'linkedin'}
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     bio = models.TextField(null=True, blank=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     avi = models.ImageField(null=True, blank=True, default='/avatar.png')
     isPrivate = models.BooleanField(default=False)
-    auth_provider=models.CharField(max_length=50, blank=False, null=False, default=AUTH_PROVIDERS.get('email'))
+    auth_provider = models.CharField(max_length=50, blank=False, null=False, default=AUTH_PROVIDERS.get('email'))
+    
+    # Adding the credits field with a default value of 1000
+    credits = models.IntegerField(default=1000)
 
+    # Adding the requested integer fields with default values of 0
+    tjobs = models.IntegerField(default=0)
+    usessions = models.IntegerField(default=0)
+    csessions = models.IntegerField(default=0)
+    passed = models.IntegerField(default=0)
+    failed = models.IntegerField(default=0)
 
     objects = CustomUserManager()
     user_permissions = models.ManyToManyField(Permission, verbose_name='user permissions', blank=True)
@@ -52,11 +60,9 @@ class CustomUser(AbstractUser):
     def tokens(self):    
         refresh = RefreshToken.for_user(self)
         return {
-            "refresh":str(refresh),
-            "access":str(refresh.access_token)
+            "refresh": str(refresh),
+            "access": str(refresh.access_token)
         }
-
-
 class Job(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
@@ -89,6 +95,8 @@ class PreparationMaterial(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     completed = models.BooleanField(default=False)
+    ready = models.BooleanField(default=False)
+
     score = models.FloatField(default=0)  # New field for the overall score
 
     def __str__(self):
@@ -186,6 +194,8 @@ class InterviewSession(models.Model):
     score = models.FloatField(default=0)  # New field for the overall score
     expired = models.BooleanField(default=False)
     marked = models.BooleanField(default=False)
+    ready = models.BooleanField(default=False)
+
 
 
 
@@ -194,6 +204,28 @@ class InterviewSession(models.Model):
     def __str__(self):
         return f"Session for {self.interview.job.title} starting at {self.start_time}"
 
+
+class Asisstant(models.Model):
+    session = models.OneToOneField(InterviewSession, on_delete=models.CASCADE, related_name='asisstant')
+    query = models.TextField()
+    question = models.TextField()
+    response = models.TextField()
+    last_interaction = models.DateTimeField(blank=True, null=True)
+    ready = models.BooleanField(default=False)
+
+
+    def __str__(self):
+        return f"Assistant response for session {self.session.id}"
+
+class Code(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    script = models.TextField()
+    response = models.TextField()
+    ready = models.BooleanField(default=False)
+
+
+    def __str__(self):
+        return f"Code submission by {self.user.username}"
 
 class InterviewBlock(models.Model):
     session = models.ForeignKey(InterviewSession, on_delete=models.CASCADE, related_name='iblocks')

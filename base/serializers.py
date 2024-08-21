@@ -24,7 +24,16 @@ from .utils import send_normal_email
 
 
 
+class CodeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Code
+        fields = ['script', 'response']
 
+
+class AsisstantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Asisstant
+        fields = [ 'response']
 
 
 class UserSerializer(serializers.ModelSerializer):

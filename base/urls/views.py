@@ -35,10 +35,10 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         for k, v in serializer.items():
             data[k] = v
 
-        
+
 
         return data
-    
+
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
@@ -48,7 +48,7 @@ class MyTokenObtainPairView(TokenObtainPairView):
 
 
 
- 
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -89,7 +89,7 @@ class UpdateUser(APIView):
             user.email = data.get('email', user.email)
             user.is_staff = data.get('isAdmin', user.is_staff)
 
-            
+
             user.save()
 
             serializer = UserSerializer(user, many=False)
@@ -147,7 +147,7 @@ class RegisterUser(APIView):
 
 
             # Load email template
-            template_path = os.path.join(settings.BASE_DIR, 'base\email_templates', 'Welcome.html')
+            template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'Welcome.html')
             with open(template_path, 'r', encoding='utf-8') as template_file:
                 html_content = template_file.read()
 
@@ -179,7 +179,7 @@ class RegisterUser(APIView):
 
 
 
-@permission_classes([IsAuthenticated]) 
+@permission_classes([IsAuthenticated])
 class GetUserProfile(APIView):
 
     def get(self, request):
@@ -188,7 +188,7 @@ class GetUserProfile(APIView):
 
 
         return Response(serializer.data)
-    
+
 
 @permission_classes([IsAuthenticated])
 class UpdateUserProfile(APIView):
@@ -236,7 +236,7 @@ class UpdateUserProfile(APIView):
 
         # Return updated user data
         return Response(serializer.data)
-    
+
 
 
 @permission_classes([IsAuthenticated])
@@ -252,7 +252,7 @@ class deleteAccount(APIView):
 
         return Response("The user was deleted successfully")
 
-    
+
 
 
 
@@ -264,7 +264,7 @@ class PasswordResetRequestView(APIView):
         serializer.is_valid(raise_exception=True)
         return Response({'message':'we have sent you a link to reset your password'}, status=status.HTTP_200_OK)
         # return Response({'message':'user with that email does not exist'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
 
 
 

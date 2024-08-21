@@ -13,7 +13,7 @@ from django.utils.decorators import method_decorator
 import os
 
 
-@method_decorator(ratelimit(key='ip', rate='4/30m', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='2/m', block=True), name='dispatch')
 class JobCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -22,6 +22,11 @@ class JobCreateView(APIView):
         genai.configure(api_key=settings.GOOGLE_API_KEY)  # Configure with your Google API key
 
     def post(self, request, *args, **kwargs):
+
+        if request.user.credits == 10:
+                return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
         data = request.data.copy()
         data['user'] = request.user.id
 
@@ -55,6 +60,12 @@ class JobCreateView(APIView):
         if serializer.is_valid():
             job_count = Job.objects.filter(user=request.user).count()
             job = serializer.save()
+            user_credits = request.user.credits
+            user_tjobs = request.user.tjobs
+            user = request.user
+            user.credits = user_credits - 10
+            user.tjobs = user_tjobs + 1
+            user.save()
             if job_count == 0:
                 # Send email
 
@@ -112,6 +123,10 @@ class JobDeleteView(APIView):
             return Response({'detail': 'Job not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         job.delete()
+        user_tjobs = request.user.tjobs
+        user = request.user
+        user.tjobs = user_tjobs - 1
+        user.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -191,6 +206,10 @@ class InterviewCreateView(APIView):
         serializer = InterviewSerializer(data=data)
         if serializer.is_valid():
             interview = serializer.save()
+            user_usessions = request.user.usessions
+            user = request.user
+            user.usessions = user_usessions + 1
+            user.save()
 
             # Extract the date from the interview_datetime and update the job's mockup_interview_date
             interview_date = interview_datetime.date()
@@ -348,9 +367,14 @@ class PreparationMaterialDetailView(APIView):
         preparation_material = get_object_or_404(PreparationMaterial, id=id)
         job = preparation_material.job
 
+
+        if preparation_material.ready == False:
+            return Response({'detail': 'Your Material Is Not Ready Yet please come back later.'}, status=status.HTTP_409_CONFLICT)
+
         # Ensure the requesting user is the job owner
         if job.user != request.user:
             return Response({'detail': 'Not authorized to view this preparation material.'}, status=status.HTTP_403_FORBIDDEN)
+
 
         # Serialize the preparation material
         serializer = PreparationMaterialSerializer(preparation_material)
@@ -406,7 +430,8 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 task_queue = Queue()
 
-@method_decorator(ratelimit(key='ip', rate='2/4m', block=True), name='dispatch')
+
+@method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
 class PreparationMaterialCreateView(APIView): 
     permission_classes = [IsAuthenticated]
 
@@ -422,15 +447,15 @@ class PreparationMaterialCreateView(APIView):
 
     def worker(self):
         while True:
-            job_id, token = task_queue.get()
+            job_id, token, request = task_queue.get()
             try:
-                self.process_task(job_id, token)
+                self.process_task(job_id, token, request=request)
             except Exception as e:
                 logger.error(f"Error: {e}")
             finally:
                 task_queue.task_done()
-
-    def process_task(self, job_id, token):
+    
+    def process_task(self, job_id, token, request):
         try:
             job = Job.objects.get(id=job_id)
             description = job.description
@@ -496,9 +521,17 @@ class PreparationMaterialCreateView(APIView):
                     answer=a,
                     score=0
                 )
+            user_credits = request.user.credits
+            user = request.user
+            user.credits = user_credits - 30
+            user.save()
 
             # If Prompt 1's response is "[YES]"
             if content1 == "[YES]":
+                user_credits = request.user.credits
+                user = request.user
+                user.credits = user_credits - 20
+                user.save()
                 prompt5 = f"Please provide me with some interview coding questions that include answers given as code snippets, for: {title}"
                 data = {
                     "model": "codestral-latest",
@@ -544,11 +577,16 @@ class PreparationMaterialCreateView(APIView):
                             language=current_language
                         )
 
+            preparation_material.ready = True
+            preparation_material.save()
         except Exception as e:
             logger.error(f"Error processing task: {e}")
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        if request.user.credits <= 50:
+                return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
         job_id = request.data.get('job_id')
         if not job_id:
             return Response({'detail': 'Job ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -561,7 +599,7 @@ class PreparationMaterialCreateView(APIView):
         response = Response(response_data, status=status.HTTP_200_OK)
 
         # Add the task to the queue
-        task_queue.put((job_id, token))
+        task_queue.put((job_id, token, request))
 
         return response
 
@@ -671,15 +709,15 @@ class PreparationMaterialMarkingView(APIView):
 
     def worker(self):
         while True:
-            material_id, token = task_queue.get()
+            material_id, token, request = task_queue.get()
             try:
-                self.process_task(material_id, token)
+                self.process_task(material_id, token, request=request)
             except Exception as e:
                 logger.error(f"Error processing task: {e}")
             finally:
                 task_queue.task_done()
 
-    def process_task(self, material_id, user):
+    def process_task(self, material_id, user, request):
         preparation_material = get_object_or_404(PreparationMaterial, id=material_id)
         blocks = PreparationBlock.objects.filter(preparation_material=preparation_material)
         codes = CodingQuestion.objects.filter(preparation_material=preparation_material)
@@ -806,9 +844,16 @@ class PreparationMaterialMarkingView(APIView):
         preparation_material.score = overall_score
         preparation_material.completed = True
         preparation_material.save()
+        user_credits = request.user.credits
+        user = request.user
+        user.credits = user_credits - 50
+        user.save()
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        if request.user.credits <= 50:
+                return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
         material_id = kwargs.get('material_id')
         if not material_id:
             return Response({'detail': 'Preparation Material ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -819,7 +864,7 @@ class PreparationMaterialMarkingView(APIView):
         response_data = {"token": str(token)}
         response = Response(response_data, status=status.HTTP_200_OK)
 
-        task_queue.put((material_id, token))
+        task_queue.put((material_id, token, request))
 
         return response
 
@@ -842,6 +887,9 @@ class InterviewRoomDetailView(APIView):
     def get(self, request, id, *args):
         interview_session = get_object_or_404(InterviewSession, id=id)
         job = interview_session.interview.job
+
+        if interview_session.ready == False:
+            return Response({'detail': 'Your Material Is Not Ready Yet please come back later.'}, status=status.HTTP_409_CONFLICT)
 
         # Ensure the requesting user is the job owner
         if job.user != request.user:
@@ -869,12 +917,13 @@ class InterviewRoomDetailView(APIView):
 
         # Print the response data to the console
         print(response_data)
+    
 
         return Response(response_data)
 
 
 
-@method_decorator(ratelimit(key='ip', rate='2/30m', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
 class InterviewRoomCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -890,15 +939,15 @@ class InterviewRoomCreateView(APIView):
 
     def worker(self):
         while True:
-            job_id, token = task_queue.get()
+            job_id, token, request = task_queue.get()
             try:
-                self.process_task(job_id, token)
+                self.process_task(job_id, token, request=request)
             except Exception as e:
                 logger.error(f"Error processing task: {e}")
             finally:
                 task_queue.task_done()
 
-    def process_task(self, job_id, token):
+    def process_task(self, job_id, token, request):
         try:    
             
             interview = get_object_or_404(Interview, id=job_id)
@@ -906,26 +955,7 @@ class InterviewRoomCreateView(APIView):
 
             current_time = now()
 
-            if interview.interview_datetime and current_time < interview.interview_datetime:
-                logger.error('Cannot create a session earlier than the interview datetime.')
-                return
-
-
-            if interview.interview_datetime and current_time > interview.interview_datetime + timedelta(hours=5):
-                logger.error('Cannot create a session more than 5 hours past the interview datetime.')
-                return
-
-
-            if InterviewSession.objects.filter(interview=interview).count() >= 2:
-                logger.error('Cannot create more than 2 sessions for the same interview.')
-                return
-
-
-            if InterviewSession.objects.filter(interview=interview, expired=False).exists():
-                logger.error('Cannot create a new session when there is an unexpired session for the same interview.')
-                return
-
-
+            
             description = interview.job.description
             interview_session = InterviewSession.objects.create(interview=interview, start_time=current_time)
 
@@ -941,7 +971,7 @@ class InterviewRoomCreateView(APIView):
 
 
             questions_and_answers = []
-            for i in range(15):
+            for i in range(6):
                 prompt4 = f"Based on this {description}, provide me just one question and its answer which would be asked in the related interview. Make the question 80% more difficult than the actual ones you expect to be asked. Note the answer part should be very detailed and start with the word 'Answer' while the question should start with the word 'Question'. If the description involves an interview that deals with code don't make any question that requires you to give code snippet as an answer. Write question along with its answer."
                 response4 = model.generate_content(prompt4)
                 if not hasattr(response4, '_result'):
@@ -991,11 +1021,14 @@ class InterviewRoomCreateView(APIView):
 
             logger.info(f"Extracted QA pairs: {questions_and_answers}")
             print(f"Extracted QA pairs: {questions_and_answers}")
-
+            user_credits = request.user.credits
+            user = request.user
+            user.credits = user_credits - 30
+            user.save()
 
             if content1 == "[YES]":
                 questions_and_answers_coding = []
-                for i in range(5):
+                for i in range(3):
                     prompt5 = f"Please provide me with just a single interview coding question and its answer given as a code snippet, for this description: {description}. Make it 90% harder than what you would actually expect. FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer' And please number the questions!!!!!!!!!!!!!!!!!!!!!"
                     data = {
                         "model": "codestral-latest",
@@ -1040,6 +1073,10 @@ class InterviewRoomCreateView(APIView):
                             questions_and_answers_coding.append((current_question, current_answer, current_language))
                         
                         print(f"Codestral AI Response: {ai_response}")
+                        user_credits = request.user.credits
+                        user = request.user
+                        user.credits = user_credits - 20
+                        user.save()
 
                     else:
                         print(f"Codestral AI Error: {codestral_response}")
@@ -1053,8 +1090,9 @@ class InterviewRoomCreateView(APIView):
                         answer=a,
                         language=lang
                     )
-
-
+            
+            interview_session.ready = True
+            interview_session.save()
         except Exception as e:
 
 
@@ -1064,15 +1102,45 @@ class InterviewRoomCreateView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        if request.user.credits <= 50:
+            return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
         job_id = request.data.get('job_id')
         if not job_id:
             return Response({'detail': 'Job ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        interview = get_object_or_404(Interview, id=job_id)
+        print(f"Interview found: {interview}")
+
+        current_time = now()
+
+
+        if interview.interview_datetime and current_time < interview.interview_datetime:
+                logger.error('Cannot create a session earlier than the interview datetime.')
+                return Response({'detail': 'Cannot create a session earlier than the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+        if interview.interview_datetime and current_time > interview.interview_datetime + timedelta(hours=5):
+            logger.error('Cannot create a session more than 5 hours past the interview datetime.')
+            return Response({'detail': 'Cannot create a session more than 5 hours past the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+        if InterviewSession.objects.filter(interview=interview).count() >= 2:
+            logger.error('Cannot create more than 2 sessions for the same interview.')
+            return Response({'detail': 'Cannot create more than 2 sessions for the same interview..'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+        if InterviewSession.objects.filter(interview=interview, expired=False).exists():
+            logger.error('Cannot create a new session when there is an unexpired session for the same interview.')
+            return Response({'detail': 'Cannot create a new session when there is an unexpired session for the same interview.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+        current_time = now()
         token = self.generate_token()
         response_data = {"token": str(token)}
         response = Response(response_data, status=status.HTTP_200_OK)
 
-        task_queue.put((job_id, token))
+        task_queue.put((job_id, token, request))
 
         return response
 
@@ -1163,7 +1231,7 @@ class InterviewCodingQuestionUpdateView(APIView):
 
 
 
-@method_decorator(ratelimit(key='ip', rate='2/30m', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
 class InterviewRoomMarkingView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1179,32 +1247,20 @@ class InterviewRoomMarkingView(APIView):
 
     def worker(self):
         while True:
-            material_id, token = task_queue.get()
+            material_id, token, request = task_queue.get()
             try:
-                self.process_task(material_id, token)
+                self.process_task(material_id, token, request=request)
             except Exception as e:
                 print(f"Error processing task: {e}")
             finally:
                 task_queue.task_done()
 
-    def process_task(self, material_id, token):
+    def process_task(self, material_id, token, request):
         interview_session = get_object_or_404(InterviewSession, id=material_id)
         blocks = InterviewBlock.objects.filter(session=interview_session)
         codes = InterviewCodingQuestion.objects.filter(session=interview_session)
 
-        if not blocks.exists():
-            print('No blocks found for this preparation material.')
-            return
-        print(f"Total number of blocks found: {blocks.count()}")
-
-        for block in blocks:
-            if not block.my_answer:
-                block.my_answer = "I don't know"
-                block.save()
-            if not (block.question and block.answer):
-                print(f'Block ID {block.id} is missing required fields.')
-                return
-
+       
         scores = []
         for block in blocks:
             print(f"Marking block: {block.id}")
@@ -1302,119 +1358,253 @@ class InterviewRoomMarkingView(APIView):
         interview_session.score = overall_score
         interview_session.marked = True
         interview_session.save()
+        user_credits = request.user.credits
+        user_csessions = request.user.csessions
+        user_passed = request.user.passed
+        user_failed = request.user.failed
+
+        if overall_score > 50 :
+            user.passed = user_passed + 1
+        else:
+            user.failed = user_failed + 1
+           
+
+
+        user = request.user
+        user.credits = user_credits - 50
+        user.csessions = user_csessions + 1
+
+        user.save()
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        if request.user.credits <= 50:
+                return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
         material_id = kwargs.get('material_id')
         if not material_id:
             return Response({'detail': 'Interview Session ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         interview_session = get_object_or_404(InterviewSession, id=material_id)
+        blocks = InterviewBlock.objects.filter(session=interview_session)
+        codes = InterviewCodingQuestion.objects.filter(session=interview_session)
+
 
         token = self.generate_token()
         response_data = {"token": str(token)}
         response = Response(response_data, status=status.HTTP_200_OK)
 
-        task_queue.put((material_id, token))
+        task_queue.put((material_id, token, request))
 
         return response
 
 from .tasks import mark_interview_room
 
+from base.models import Asisstant
+from base.serializers import AsisstantSerializer
+
+
+
+class GetAgentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            # Check if the user has an Agent object
+            agent = Asisstant.objects.filter(session__interview__user=request.user).first()
+
+            if agent:
+                # Serialize and return the Agent object
+                serializer = AsisstantSerializer(agent)
+                if agent.ready == False:
+                    return Response({'detail': 'Your Material Is Not Ready Yet please come back later.'}, status=status.HTTP_409_CONFLICT)
+
+                agent.ready = False
+                agent.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "No agent response exists for this user."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": f"An error occurred while processing your request: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 #SUPER AGENT 1
 
-@method_decorator(ratelimit(key='ip', rate='3/m', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='4/m', block=True), name='dispatch')
 class AskAgentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        genai.configure(api_key=settings.GOOGLE_API_KEY)  # Configure with your Google API key
+        self.worker_thread = threading.Thread(target=self.worker)
+        self.worker_thread.daemon = True
+        self.worker_thread.start()
+        genai.configure(api_key=settings.GOOGLE_API_KEY)
+
+    def generate_token(self):
+        return uuid.uuid4()
+
+    def worker(self):
+        while True:
+            session_id, query, question, request, token = task_queue.get()
+            try:
+                self.process_task(session_id, query, question, request, token)
+            except Exception as e:
+                print(f"Error processing task: {e}")
+            finally:
+                task_queue.task_done()
+
+    def process_task(self, session_id, query, question, request, token):
+        user = request.user
+        session = get_object_or_404(InterviewSession, id=session_id)
+
+        # Fetch or create the most recent Assistant interaction for this session
+        agent, created = Asisstant.objects.get_or_create(session=session)
+
+        # Check if 20 minutes have passed since the last interaction or if the question has changed
+        time_now = timezone.now()
+        twenty_minutes_ago = time_now - timedelta(minutes=20)
+        is_new_session = created or agent.last_interaction is None or agent.last_interaction < twenty_minutes_ago
+        is_new_question = agent.question != question
+
+        if is_new_session or is_new_question:
+            # Reset interaction and update question
+            agent.question = question
+            agent.last_interaction = time_now
+
+            # AI prompt with full context
+            prompt = (
+                f"Question: {question}\n"
+                f"User's Query: {query}\n"
+                "Please answer my query for the question in less than 100 words. "
+                "You are here to clarify the question for me if I need any clarification. "
+                "Avoid unnecessary conversations and respond with 'Sorry, can't help with that' if the query is irrelevant to the question. "
+                "Do not give the answer to the question directly; your task is to clarify any issues I may have. "
+                "If my query asks for a direct answer, reply with 'I can't help you with that'."
+            )
+        else:
+            # Continue the conversation with just the user's query
+            prompt = f"InitialQuestion: {question}\n, my question: {query}"
+
+        # Generate response using genai
+        model = genai.GenerativeModel('gemini-1.0-pro-latest')
+        response = model.generate_content(prompt)
+        if not hasattr(response, '_result'):
+            print("Error generating AI response.")
+            return
+        content = response._result.candidates[0].content.parts[0].text.strip()
+
+        # Additional prompt to check if the response is directly answering the question
+        check_prompt = (
+            f"Question: {question}\n"
+            f"Response: {content}\n"
+            "Does the response directly answer the question? Respond with 'Yes' or 'No'."
+        )
+        check_response = model.generate_content(check_prompt)
+        if not hasattr(check_response, '_result'):
+            print("Error generating AI check response.")
+            return
+        check_content = check_response._result.candidates[0].content.parts[0].text.strip()
+
+        # If the AI confirms it's directly answering the question, modify the response
+        if "yes" in check_content.lower():
+            content = "I Don't Know"
+
+        # Save the response to the Assistant model and update last interaction time
+        agent.response = content
+        agent.ready = True
+        agent.last_interaction = time_now
+        agent.save()
+
+        # Deduct credits from the user
+        user.credits -= 20
+        user.save()
 
     def post(self, request, session_id):
-        session = get_object_or_404(InterviewSession, id=session_id)
+        user = request.user
+
+        if user.credits <= 20:
+            return Response({'detail': 'Error: You are out of credits. Upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
         query = request.data.get('query')
         question = request.data.get('question')
 
         if not query or not question:
             return Response({'detail': 'Query and question are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if an Agent object already exists for this session and delete it
-        existing_agent = Agent.objects.filter(session=session).first()
-        if existing_agent:
-            existing_agent.delete()
+        # Generate a token for the task
+        token = self.generate_token()
+        response_data = {"token": str(token)}
+        response = Response(response_data, status=status.HTTP_200_OK)
 
-        # AI prompt
-        prompt = (
-            f"Question: {question}\n"
-            f"User's Query: {query}\n"
-            # "THINK OF YOURSELF AS AN ASSISTANT, QUESTION REPRESENT AN INTERVIEW QUESTION WHILE USER'S QUERY REPRESENTS THE INTERVIEWEE's QUESTION REGARDING THE INTERVIEW QUESTION"
-            "Please answer my query for the question in less than 100 words. "
-            "Avoid unnecessary conversations and respond with 'Sorry, can't help with that' if the query is irrelevant to the question."
-            "DONT GIVE THE ANSWER TO THE QUESTION YOUR WORK IS JUST TO EXPLAIN IF MY QUERY ASKS FOR A DIRECT ANSWER YOU REPLY I CANT HELP YOU WITH THAT"
-            "YOUR RESPONSE SHOULD ONLY BE YOUR REPSONSE TO THE QUERY ONLY NO EXTRA WORDS!!!!!!!!!!!!!"
-            "YOUR RESPONSE SHOULD ONLY BE YOUR REPSONSE TO THE QUERY ONLY NO EXTRA WORDS!!!!!!!!!!!!!"
-            "YOUR RESPONSE SHOULD ONLY BE YOUR REPSONSE TO THE QUERY ONLY NO EXTRA WORDS!!!!!!!!!!!!!"
+        # Put the task in the queue for asynchronous processing
+        task_queue.put((session_id, query, question, request, token))
 
-
-
-        )
-
-        # Generate response using genai
-        model = genai.GenerativeModel('gemini-1.0-pro-latest')
-        response = model.generate_content(prompt)
-        if not hasattr(response, '_result'):
-            return Response({'detail': 'Error generating AI response.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        content = response._result.candidates[0].content.parts[0].text.strip()
-
-        # Save the response to the Agent model
-        agent = Agent.objects.create(
-            session=session,
-            query=query,
-            question=question,
-            response=content
-        )
-
-        return Response({
-            'session': session_id,
-            'query': query,
-            'question': question,
-            'response': content
-        }, status=status.HTTP_201_CREATED)
-
-
+        return response
+    
 import requests
-#SUPER AGENT 2
-class CheckSessionExpiredView(APIView):
-    permission_classes = [IsAuthenticated]
+# #SUPER AGENT 2
+# class CheckSessionExpiredView(APIView):
+#     permission_classes = [IsAuthenticated]
 
-    def post(self, request, session_id):
-        session = get_object_or_404(InterviewSession, id=session_id)
+#     def post(self, request, session_id):
+#         session = get_object_or_404(InterviewSession, id=session_id)
 
-        # Check if the session is expired
-        current_time = timezone.now()
-        one_hour_after_start = session.start_time + timezone.timedelta(hours=1)
+#         # Check if the session is expired
+#         current_time = timezone.now()
+#         one_hour_after_start = session.start_time + timezone.timedelta(hours=1)
 
-        if current_time > one_hour_after_start:
+#         if current_time > one_hour_after_start:
 
 
-            # Trigger the external URL
-            material_id = session_id
-            marking_view = InterviewRoomMarkingView.as_view()
-            response = marking_view(request._request, material_id=session_id)  # Pass the internal request object and session ID
+#             # Trigger the external URL
+#             material_id = session_id
+#             marking_view = InterviewRoomMarkingView.as_view()
+#             response = marking_view(request._request, material_id=session_id)  # Pass the internal request object and session ID
 
-            if response.status_code != 200:
-                return Response({'detail': 'Failed to mark the interview room.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#             if response.status_code != 200:
+#                 return Response({'detail': 'Failed to mark the interview room.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            session.expired = True
-            session.save()
-            return Response({'detail': 'Session marked as expired and marking view triggered.'}, status=status.HTTP_200_OK)
+#             session.expired = True
+#             session.save()
+#             return Response({'detail': 'Session marked as expired and marking view triggered.'}, status=status.HTTP_200_OK)
 
         
-        return Response({'detail': 'Session is not expired yet.'}, status=status.HTTP_200_OK)
+#         return Response({'detail': 'Session is not expired yet.'}, status=status.HTTP_200_OK)
     
 
 
+class CheckSessionExpiredView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # Get all sessions belonging to the requesting user that are not marked as expired
+        sessions = InterviewSession.objects.filter(user=request.user, expired=False)
+
+        current_time = timezone.now()
+        updated_sessions = []
+
+        for session in sessions:
+            one_hour_after_start = session.start_time + timezone.timedelta(hours=1)
+
+            if current_time > one_hour_after_start:
+                # Trigger the marking view for each expired session
+                marking_view = InterviewRoomMarkingView.as_view()
+                response = marking_view(request._request, material_id=session.id)
+
+                if response.status_code == 200:
+                    session.expired = True
+                    session.save()
+                    user_usessions = request.user.usessions
+                    user = request.user
+                    user.usessions = user_usessions - 1
+                    user.save()
+                    updated_sessions.append(session.id)
+                else:
+                    return Response({'detail': f'Failed to mark the interview room for session {session.id}.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if updated_sessions:
+            return Response({'detail': f'Sessions {updated_sessions} marked as expired and marking view triggered.'}, status=status.HTTP_200_OK)
+        else:
+            return Response({'detail': 'No sessions were marked as expired.'}, status=status.HTTP_200_OK)
 
 
 
@@ -1423,23 +1613,34 @@ class CheckSessionExpiredView(APIView):
 
 
 
+from base.models import Code
+from base.serializers import CodeSerializer
 
-
-@method_decorator(ratelimit(key='ip', rate='3/m', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='10/m', block=True), name='dispatch')
 class RunCodeView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, *args, **kwargs):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.worker_thread = threading.Thread(target=self.worker)
+        self.worker_thread.daemon = True
+        self.worker_thread.start()
+
+    def generate_token(self):
+        return uuid.uuid4()
+
+    def worker(self):
+        while True:
+            user, script, language, version_index, request_token = task_queue.get()
+            try:
+                self.process_task(user, script, language, version_index, request_token)
+            except Exception as e:
+                print(f"Error processing task: {e}")
+            finally:
+                task_queue.task_done()
+
+    def process_task(self, user, script, language, version_index, request_token):
         try:
-            data = request.data
-
-            script = data.get('script')
-            language = data.get('language')
-            version_index = data.get('versionIndex')
-
-            if not script or not language:
-                return Response({"error": "Invalid request data"}, status=400)
-
             payload = {
                 'script': script,
                 'language': language,
@@ -1453,8 +1654,72 @@ class RunCodeView(APIView):
             response = requests.post('https://api.jdoodle.com/v1/execute', json=payload)
 
             if response.status_code != 200:
-                return Response({"error": "Error from JDoodle API", "details": response.text}, status=500)
+                print(f"Error from JDoodle API: {response.text}")
+                return
 
-            return Response(response.json())
+            # Ensure the user has only one Code object
+            Code.objects.filter(user=user).delete()
+
+            # Save the new Code object
+            code = Code.objects.create(
+                user=user,
+                script=script,
+                response=response.text
+            )
+
+            code.ready = True
+            code.save()
+
+            # Deduct credits from the user
+            user.credits -= 5
+            user.save()
+
+            print(f"Task completed successfully for token: {request_token}")
         except Exception as e:
-            return Response({"error": f"An error occurred while processing your request: {e}"}, status=500)
+            print(f"An error occurred while processing the request: {e}")
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+
+        if user.credits <= 5:
+            return Response({'detail': 'Error: You are out of credits. Upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data
+        script = data.get('script')
+        language = data.get('language')
+        version_index = data.get('versionIndex')
+
+        if not script or not language:
+            return Response({"error": "Invalid request data"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Generate a token for this task
+        request_token = self.generate_token()
+
+        # Queue the task
+        task_queue.put((user, script, language, version_index, request_token))
+
+        # Return the token immediately
+        return Response({"token": str(request_token)}, status=status.HTTP_200_OK)
+
+
+
+class GetCodeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            # Check if the user has a Code object
+            code = Code.objects.filter(user=request.user).first()
+
+            if code:
+                # Serialize and return the Code object
+                serializer = CodeSerializer(code)
+                if code.ready == False:
+                    return Response({'detail': 'Your Material Is Not Ready Yet please come back later.'}, status=status.HTTP_409_CONFLICT)
+                code.ready = False
+                code.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "No code exists for this user."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": f"An error occurred while processing your request: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

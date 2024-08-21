@@ -2,8 +2,12 @@ from django.urls import path
 from .api import *
 
 urlpatterns = [
-
+    path('expired/', CheckSessionExpiredView.as_view(), name='check-session-expired'),
     path('run/', RunCodeView.as_view(), name='run_code'),
+    path('code/', GetCodeView.as_view(), name='get_code'),
+    path('agent/', GetAgentView.as_view(), name='get_agent'),
+
+
     path('jobs/', JobListView.as_view(), name='job-list'),
     path('jobs/create/', JobCreateView.as_view(), name='job-create'),
     path('interviews/create/', InterviewCreateView.as_view(), name='interview-create'),
@@ -51,7 +55,6 @@ urlpatterns = [
 
 
 
-    path('expired/<int:session_id>/', CheckSessionExpiredView.as_view(), name='check-session-expired'),
 
 
 ]
