@@ -6,7 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import AbstractUser, BaseUserManager, Permission
 from django.conf import settings
 # Create your models here.
-
+from django.utils import timezone
 
 
 
@@ -91,13 +91,15 @@ class Interview(models.Model):
         return f"Interview for {self.job.title} on {self.interview_datetime}"
 
 
+
+
 class PreparationMaterial(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     completed = models.BooleanField(default=False)
     ready = models.BooleanField(default=False)
-
-    score = models.FloatField(default=0)  # New field for the overall score
+    score = models.FloatField(default=0)
+    created_at = models.DateTimeField(default=timezone.now)  # Set default to the current time
 
     def __str__(self):
         return self.title

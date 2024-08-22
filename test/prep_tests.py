@@ -1,7 +1,7 @@
 import requests
 import random
 import time
-from answers import answers  # Importing the answers from answers.py
+from vectorapi.base.answers import answers  # Importing the answers from answers.py
 
 def create_preparation_material(url, token, job_id):
     headers = {'Authorization': f'Bearer {token}'}

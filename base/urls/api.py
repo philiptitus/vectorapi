@@ -11,6 +11,68 @@ from base.core_apis.extract_score import extract_first_number
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 import os
+from base.answers import answers
+
+
+class AnswerListView(APIView):
+    def get(self, request, *args, **kwargs):
+        # Filter answers based on the search query parameter
+        search_query = request.query_params.get('name')
+        if search_query is not None:
+            filtered_answers = [answer for answer in answers if search_query.lower() in answer.lower()]
+        else:
+            filtered_answers = answers
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10  # Set the number of items per page
+        result_page = paginator.paginate_queryset(filtered_answers, request)
+
+        return paginator.get_paginated_response(result_page)
+
+class LatestInterviewSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        interview_sessions = InterviewSession.objects.filter(
+            interview__user=request.user,
+            expired=False,
+            marked=False,
+            ready=True
+        ).order_by('-start_time').first()
+
+        if not interview_sessions:
+            return Response({"detail": "No suitable interview session found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = InterviewSessionSerializer(interview_sessions)
+        return Response(serializer.data)
+
+
+
+from rest_framework.pagination import PageNumberPagination
+
+class InterviewSessionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, interview_id, *args, **kwargs):
+        try:
+            interview = Interview.objects.get(id=interview_id, job__user=request.user)
+        except Interview.DoesNotExist:
+            return Response({"detail": "Interview not found or not accessible."}, status=status.HTTP_404_NOT_FOUND)
+
+        interview_sessions = InterviewSession.objects.filter(interview=interview)
+        name = request.query_params.get('name')
+        if name is not None:
+            interview_sessions = interview_sessions.filter(score__icontains=name)
+
+
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10  # Set the number of posts per page
+        result_page = paginator.paginate_queryset(interview_sessions, request)
+        
+        serializer = InterviewSessionSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
 
 
 @method_decorator(ratelimit(key='ip', rate='2/m', block=True), name='dispatch')
@@ -24,6 +86,9 @@ class JobCreateView(APIView):
     def post(self, request, *args, **kwargs):
 
         if request.user.credits == 10:
+                notification_message = f'It seems you are out of credits please upgrade your account or contact support :)'
+                Notification.objects.create(user=request.user, message=notification_message)
+
                 return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -70,7 +135,7 @@ class JobCreateView(APIView):
                 # Send email
 
             # Load email template
-                template_path = os.path.join(settings.BASE_DIR, 'base\email_templates', 'FIRST.html')
+                template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'FIRST.html')
                 with open(template_path, 'r', encoding='utf-8') as template_file:
                     html_content = template_file.read()
                 email_data = {
@@ -152,9 +217,37 @@ class JobListView(APIView):
 
     def get(self, request, *args, **kwargs):
         jobs = Job.objects.filter(user=request.user)
-        serializer = JobSerializer(jobs, many=True)
-        return Response(serializer.data)
+        name = request.query_params.get('name')
+        if name is not None:
+            jobs = jobs.filter(title__icontains=name)
 
+        paginator = PageNumberPagination()
+        paginator.page_size = 10  # Set the number of posts per page
+        result_page = paginator.paginate_queryset(jobs, request)
+
+
+        serializer = JobSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+
+class PreparationMaterialListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        preparation_materials = PreparationMaterial.objects.filter(job__user=request.user).order_by('-created_at')
+        name = request.query_params.get('name')
+        if name is not None:
+            preparation_materials = preparation_materials.filter(title__icontains=name)
+
+
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10  # Set the number of posts per page
+        result_page = paginator.paginate_queryset(preparation_materials, request)
+        
+        serializer = PreparationMaterialSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 
@@ -216,7 +309,7 @@ class InterviewCreateView(APIView):
             job.mockup_interview_date = interview_date
             job.save()
 
-            template_path = os.path.join(settings.BASE_DIR, 'base', 'email_templates', 'INTERVIEW.html')
+            template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'INTERVIEW.html')
             with open(template_path, 'r', encoding='utf-8') as template_file:
                 html_content = template_file.read()
 
@@ -290,7 +383,7 @@ class InterviewUpdateView(APIView):
                 job.mockup_interview_date = interview_date
                 job.save()
 
-                template_path = os.path.join(settings.BASE_DIR, 'base', 'email_templates', 'Reschedule.html')
+                template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'Reschedule.html')
                 with open(template_path, 'r', encoding='utf-8') as template_file:
                     html_content = template_file.read()
 
@@ -330,7 +423,7 @@ class InterviewDeleteView(APIView):
         Notification.objects.create(user=request.user, message=notification_message)
 
 
-        template_path = os.path.join(settings.BASE_DIR, 'base', 'email_templates', 'Delete.html')
+        template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'Delete.html')
         with open(template_path, 'r', encoding='utf-8') as template_file:
             html_content = template_file.read()
         # Send email
@@ -356,8 +449,19 @@ class UserInterviewListView(APIView):
 
     def get(self, request, *args, **kwargs):
         interviews = Interview.objects.filter(user=request.user)
-        serializer = InterviewSerializer(interviews, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+        name = request.query_params.get('name')
+        if name is not None:
+            interviews = interviews.filter(score__icontains=name)
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10  # Set the number of posts per page
+        result_page = paginator.paginate_queryset(interviews, request)
+        
+
+        serializer = InterviewSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class PreparationMaterialDetailView(APIView):
@@ -469,6 +573,7 @@ class PreparationMaterialCreateView(APIView):
             model = genai.GenerativeModel('gemini-1.0-pro-latest')
             response1 = model.generate_content(prompt1)
             content1 = response1._result.candidates[0].content.parts[0].text.strip()
+            print(content1)
 
             # Prompt 2
             prompt2 = f"Interview Preparation Tips for: {title}"
@@ -579,12 +684,18 @@ class PreparationMaterialCreateView(APIView):
 
             preparation_material.ready = True
             preparation_material.save()
+            notification_message = f'Hey {request.user.username}, I finished making your prep resources please come for them'
+            Notification.objects.create(user=request.user, message=notification_message)
+
         except Exception as e:
             logger.error(f"Error processing task: {e}")
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         if request.user.credits <= 50:
+                notification_message = f'It seems you are out of credits please upgrade your account or contact support :)'
+                Notification.objects.create(user=request.user, message=notification_message)
+
                 return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
 
         job_id = request.data.get('job_id')
@@ -765,7 +876,7 @@ class PreparationMaterialMarkingView(APIView):
 
                 return
 
-            time.sleep(5)
+            time.sleep(1)
 
         print(scores)
 
@@ -826,7 +937,7 @@ class PreparationMaterialMarkingView(APIView):
                 logger.error(f"Error extracting score for coding question {code.id}: {e}")
                 return
 
-            time.sleep(5)
+            time.sleep(1)
         print(code_scores)
 
 
@@ -844,6 +955,9 @@ class PreparationMaterialMarkingView(APIView):
         preparation_material.score = overall_score
         preparation_material.completed = True
         preparation_material.save()
+        notification_message = f'Ola {request.user.username}, I am done marking the prep material you recently submitted , you can view your results in the prep section, you can make more prep materials always :) !'
+        Notification.objects.create(user=request.user, message=notification_message)
+
         user_credits = request.user.credits
         user = request.user
         user.credits = user_credits - 50
@@ -852,6 +966,9 @@ class PreparationMaterialMarkingView(APIView):
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         if request.user.credits <= 50:
+                notification_message = f'It seems you are out of credits please upgrade your account or contact support :)'
+                Notification.objects.create(user=request.user, message=notification_message)
+
                 return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
 
         material_id = kwargs.get('material_id')
@@ -1007,7 +1124,7 @@ class InterviewRoomCreateView(APIView):
                 if question and answer:
                     questions_and_answers.append((question, answer))
 
-                time.sleep(5)
+                time.sleep(1)
 
 
             for q, a in questions_and_answers:
@@ -1081,7 +1198,7 @@ class InterviewRoomCreateView(APIView):
                     else:
                         print(f"Codestral AI Error: {codestral_response}")
 
-                    time.sleep(5)
+                    time.sleep(1)
 
                 for q, a, lang in questions_and_answers_coding:
                     InterviewCodingQuestion.objects.create(
@@ -1093,6 +1210,9 @@ class InterviewRoomCreateView(APIView):
             
             interview_session.ready = True
             interview_session.save()
+            notification_message = f'Hi {request.user.username}, I am done preparing the interview meeting room please hurry and join!'
+            Notification.objects.create(user=request.user, message=notification_message)
+
         except Exception as e:
 
 
@@ -1103,6 +1223,9 @@ class InterviewRoomCreateView(APIView):
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         if request.user.credits <= 50:
+            notification_message = f'It seems you are out of credits please upgrade your account or contact support :)'
+            Notification.objects.create(user=request.user, message=notification_message)
+
             return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
 
         job_id = request.data.get('job_id')
@@ -1290,7 +1413,7 @@ class InterviewRoomMarkingView(APIView):
                 print(f"Error extracting score for block {block.id}: {e}")
                 return
 
-            time.sleep(5)
+            time.sleep(1)
 
         print(scores)
 
@@ -1346,7 +1469,7 @@ class InterviewRoomMarkingView(APIView):
                 print(f"Error extracting score for coding question {code.id}: {e}")
                 return
 
-            time.sleep(5)
+            time.sleep(1)
         print(code_scores)
 
         block_scores = InterviewBlock.objects.filter(session=interview_session).values_list('score', flat=True)
@@ -1358,6 +1481,9 @@ class InterviewRoomMarkingView(APIView):
         interview_session.score = overall_score
         interview_session.marked = True
         interview_session.save()
+        notification_message = f'Hello there {request.user.username}, congratulations on finishing your interview session please head on to the Interview section to see how you perfomed , you are free to make one more interview session for this job but it has to be within 5 hours from now:)!'
+        Notification.objects.create(user=request.user, message=notification_message)
+
         user_credits = request.user.credits
         user_csessions = request.user.csessions
         user_passed = request.user.passed
@@ -1379,6 +1505,9 @@ class InterviewRoomMarkingView(APIView):
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         if request.user.credits <= 50:
+                notification_message = f'It seems you are out of credits please upgrade your account or contact support :)'
+                Notification.objects.create(user=request.user, message=notification_message)
+
                 return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
 
         material_id = kwargs.get('material_id')
@@ -1427,6 +1556,8 @@ class GetAgentView(APIView):
         except Exception as e:
             return Response({"error": f"An error occurred while processing your request: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 #SUPER AGENT 1
+
+
 
 @method_decorator(ratelimit(key='ip', rate='4/m', block=True), name='dispatch')
 class AskAgentView(APIView):
@@ -1479,36 +1610,52 @@ class AskAgentView(APIView):
                 "Avoid unnecessary conversations and respond with 'Sorry, can't help with that' if the query is irrelevant to the question. "
                 "Do not give the answer to the question directly; your task is to clarify any issues I may have. "
                 "If my query asks for a direct answer, reply with 'I can't help you with that'."
+                "Through out this conversation you are to reply with 50 words or less"
             )
         else:
             # Continue the conversation with just the user's query
-            prompt = f"InitialQuestion: {question}\n, my question: {query}"
+            prompt = f"InitialQuestion: {question}\nMy question: {query}"
 
         # Generate response using genai
-        model = genai.GenerativeModel('gemini-1.0-pro-latest')
-        response = model.generate_content(prompt)
-        if not hasattr(response, '_result'):
-            print("Error generating AI response.")
-            return
-        content = response._result.candidates[0].content.parts[0].text.strip()
+        try:
+            model = genai.GenerativeModel('gemini-1.0-pro-latest')
+            response = model.generate_content(prompt)
+            if not hasattr(response, '_result'):
+                raise ValueError("Invalid response structure from AI model")
+            content = response._result.candidates[0].content.parts[0].text.strip()
 
-        # Additional prompt to check if the response is directly answering the question
-        check_prompt = (
-            f"Question: {question}\n"
-            f"Response: {content}\n"
-            "Does the response directly answer the question? Respond with 'Yes' or 'No'."
-        )
-        check_response = model.generate_content(check_prompt)
-        if not hasattr(check_response, '_result'):
-            print("Error generating AI check response.")
-            return
-        check_content = check_response._result.candidates[0].content.parts[0].text.strip()
+            # Additional prompt to check if the response is directly answering the question
+            check_prompt = (
+                f"Question: {question}\n"
+                f"Response: {content}\n"
+                "Does the response directly answer the question? Respond with 'Yes' or 'No'."
+            )
+            check_response = model.generate_content(check_prompt)
+            if not hasattr(check_response, '_result'):
+                raise ValueError("Invalid check response structure from AI model")
+            check_content = check_response._result.candidates[0].content.parts[0].text.strip()
 
-        # If the AI confirms it's directly answering the question, modify the response
-        if "yes" in check_content.lower():
-            content = "I Don't Know"
+            # If the AI confirms it's directly answering the question, modify the response
+            if "yes" in check_content.lower():
+                content = "I don't know"
 
-        # Save the response to the Assistant model and update last interaction time
+            # Check if the response exceeds 50 words
+            word_count = len(content.split())
+            if word_count > 50:
+                # Summarize the response to be less than 50 words
+                summarize_prompt = (
+                    f"Response: {content}\n"
+                    "Summarize the above response in less than 50 words."
+                )
+                summary_response = model.generate_content(summarize_prompt)
+                if not hasattr(summary_response, '_result'):
+                    raise ValueError("Invalid summary response structure from AI model")
+                content = summary_response._result.candidates[0].content.parts[0].text.strip()
+        except Exception as e:
+            print(f"Error generating AI response: {e}")
+            content = "An error occurred while generating a response. Please try again later."
+
+        # Save the response to the Assistant model and update the last interaction time
         agent.response = content
         agent.ready = True
         agent.last_interaction = time_now
@@ -1522,6 +1669,9 @@ class AskAgentView(APIView):
         user = request.user
 
         if user.credits <= 20:
+            notification_message = f'It seems you are out of credits please upgrade your account or contact support :)'
+            Notification.objects.create(user=request.user, message=notification_message)
+
             return Response({'detail': 'Error: You are out of credits. Upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
 
         query = request.data.get('query')
@@ -1539,7 +1689,11 @@ class AskAgentView(APIView):
         task_queue.put((session_id, query, question, request, token))
 
         return response
-    
+
+
+
+
+
 import requests
 # #SUPER AGENT 2
 # class CheckSessionExpiredView(APIView):

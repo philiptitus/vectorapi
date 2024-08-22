@@ -2,10 +2,14 @@ from django.urls import path
 from .api import *
 
 urlpatterns = [
+    path('latest/', LatestInterviewSessionView.as_view(), name='latest-interview-session'),
+    path('answers/', AnswerListView.as_view(), name='answer-list'),
+
     path('expired/', CheckSessionExpiredView.as_view(), name='check-session-expired'),
     path('run/', RunCodeView.as_view(), name='run_code'),
     path('code/', GetCodeView.as_view(), name='get_code'),
     path('agent/', GetAgentView.as_view(), name='get_agent'),
+    path('materials/', PreparationMaterialListView.as_view(), name='preparation-material-list'),
 
 
     path('jobs/', JobListView.as_view(), name='job-list'),
@@ -54,6 +58,8 @@ urlpatterns = [
     path('ask-agent/<int:session_id>/', AskAgentView.as_view(), name='ask-agent'),
 
 
+
+    path('interviews/<int:interview_id>/sessions/', InterviewSessionListView.as_view(), name='interview-session-list'),
 
 
 

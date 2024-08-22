@@ -85,3 +85,8 @@ coverage.xml
 *.log
 *.out
 *.err
+
+
+
+# Django settings
+jennie/jennie/settings.py
