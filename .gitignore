@@ -9,6 +9,8 @@ media/
 
 # Environment variables
 .env
+.gcloudignore
+app.yaml
 
 # IDEs
 .vscode/
