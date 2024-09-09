@@ -1,66 +1,85 @@
+Here’s a more readable and formatted version of your README, incorporating the modifications you requested:
 
-```markdown
-# VECTOR API FOR JENNIE AI
+---
 
-This repository is the backend API for the Jennie project, which is used to test out API endpoints. The frontend for this project is available at [Jennie Frontend Repository](https://github.com/philiptitus/jennie.git).
+# Vector API for Jennie AI
+
+This repository contains the backend API for the **Jennie AI** project, used to interact with various endpoints for testing and development purposes. You can also find the frontend code for this project in the [Jennie Frontend Repository](https://github.com/philiptitus/jennie.git).
+
+Additionally, you can access the complete API documentation [here](https://documenter.getpostman.com/view/31401198/2sAXjDfG64).
+
+---
 
 ## Table of Contents
-- [Technologies Used](#technologies-used)
-- [Getting Started](#getting-started)
-- [Environment Setup](#environment-setup)
-- [Running the Application](#running-the-application)
-- [Available Endpoints](#available-endpoints)
-- [Testing the API](#testing-the-api)
+
+1. [Technologies Used](#technologies-used)
+2. [Getting Started](#getting-started)
+3. [Environment Setup](#environment-setup)
+4. [Running the Application](#running-the-application)
+5. [Available Endpoints](#available-endpoints)
+6. [Testing the API](#testing-the-api)
+7. [Contributing](#contributing)
+8. [License](#license)
+
+---
 
 ## Technologies Used
 
-This project is built with Django and utilizes the following packages:
+The backend for **Jennie AI** is powered by Django and utilizes the following packages:
 
-- Django==4.2.15
-- djangorestframework==3.15.2
-- djangorestframework-simplejwt==5.3.1
-- django-cors-headers==4.4.0
-- django-ratelimit==4.1.0
-- django-redis==5.4.0
-- django-storages==1.14.4
+- Django 4.2.15
+- Django REST Framework 3.15.2
+- Simple JWT 5.3.1
+- Django CORS Headers 4.4.0
+- Django Ratelimit 4.1.0
+- Django Redis 5.4.0
+- Django Storages 1.14.4
 - Celery
 - Python-dotenv
-- Flask==3.0.3
-- Flask-Cors==4.0.1
+- Flask 3.0.3
+- Flask-CORS 4.0.1
 - Gunicorn
-- Psycopg2==2.9.9
-- Google API libraries (generative AI, auth, and more)
+- Psycopg2 2.9.9
+- Google API Libraries (Generative AI, Authentication, etc.)
 
-For a full list of dependencies, please refer to the `requirements.txt` file.
+For a complete list of dependencies, refer to the `requirements.txt` file.
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-Before setting up the project, ensure that you have the following installed:
+Before starting, make sure you have the following installed:
 
-- Python 3.8+
-- PostgreSQL
-- Redis (optional, if you plan to use Celery)
-- Virtualenv
+- **Python** (version 3.8+)
+- **PostgreSQL**
+- **Redis** (optional, if using Celery)
+- **Virtualenv**
 
 ### Environment Setup
 
 1. **Clone the Repository**
 
+   Clone the project repository from GitHub:
+
    ```bash
-   git clone https://github.com/your-username/jennie-backend.git
-   cd jennie-backend
+   git clone https://github.com/philiptitus/vectorapi.git
+   cd vectorapi
    ```
 
 2. **Create a Virtual Environment**
 
+   Set up a Python virtual environment:
+
    ```bash
    python3 -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
    ```
 
 3. **Install Dependencies**
+
+   Install the necessary project dependencies:
 
    ```bash
    pip install -r requirements.txt
@@ -70,7 +89,7 @@ Before setting up the project, ensure that you have the following installed:
 
    Create a `.env` file in the project root directory with the following variables:
 
-   ```env
+   ```bash
    DJANGO_SECRET_KEY=your-secret-key
    DJANGO_DEBUG=True  # Set to False in production
    DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
@@ -96,11 +115,15 @@ Before setting up the project, ensure that you have the following installed:
 
 5. **Apply Migrations**
 
+   Run database migrations:
+
    ```bash
    python manage.py migrate
    ```
 
 6. **Create a Superuser**
+
+   Set up an admin user for the Django admin interface:
 
    ```bash
    python manage.py createsuperuser
@@ -108,39 +131,47 @@ Before setting up the project, ensure that you have the following installed:
 
 7. **Collect Static Files**
 
+   Collect static assets:
+
    ```bash
    python manage.py collectstatic
    ```
+
+---
 
 ## Running the Application
 
 1. **Start the Development Server**
 
+   Run the application locally using the Django development server:
+
    ```bash
    python manage.py runserver
    ```
 
-   The application will be available at `http://localhost:8000`.
+   The app will be available at `http://localhost:8000`.
 
 2. **Start Celery Worker (Optional)**
 
-   If you're using Celery for background tasks, start the worker with:
+   If you're using Celery for background tasks, you can start the worker with:
 
    ```bash
    celery -A jennie worker --loglevel=info
    ```
 
-3. **Start Gunicorn for Production**
+3. **Production with Gunicorn**
 
-   For production, you can use Gunicorn:
+   For production, you can serve the application using Gunicorn:
 
    ```bash
    gunicorn jennie.wsgi:application --bind 0.0.0.0:8000
    ```
 
+---
+
 ## Available Endpoints
 
-Here are the main endpoints available in this API:
+Here are the primary API endpoints available:
 
 ### User Endpoints (`/api/users/`)
 - **Login**: `POST /api/users/login/`
@@ -166,40 +197,51 @@ Here are the main endpoints available in this API:
 - **Create Interview**: `POST /api/v1/interviews/create/`
 - **User Interviews**: `GET /api/v1/interviews/`
 
+---
+
 ## Testing the API
 
-You can test the API using tools like Postman or cURL.
+You can test the API locally or on the deployed server.
 
-### Postman
+- **Local Testing**: Use tools like [Postman](https://www.postman.com/) or `curl` for testing. 
+- **Deployed Server**: If you prefer, you can test the deployed version of the API using the following base URL:
 
-1. **Import Endpoints**
+  ```
+  https://jennie-1720624972853.ue.r.appspot.com
+  ```
 
-   You can import the API endpoints into Postman by creating a new collection and adding the above endpoints with the appropriate request methods (GET, POST, PUT, DELETE).
+### Postman Testing
 
-2. **Authorization**
-
-   For protected endpoints, use JWT authentication. Obtain a token by logging in via the `/api/users/login/` endpoint and then set the token in the `Authorization` header:
+1. **Import Endpoints**: Create a collection in Postman and add the API endpoints with their corresponding request methods (GET, POST, PUT, DELETE).
+   
+2. **JWT Authentication**: For protected routes, obtain a JWT token by logging in via the `/api/users/login/` endpoint. Include the token in the `Authorization` header:
 
    ```
    Authorization: Bearer <your-jwt-token>
    ```
 
-3. **Example Request**
+3. **Sample Request**: Example of retrieving the latest interview session:
 
-   To get the latest interview session:
-
-   ```bash
-   GET http://localhost:8000/api/v1/latest/
+   ```
+   GET https://jennie-1720624972853.ue.r.appspot.com/api/v1/latest/
    ```
 
-   With JWT Token in headers.
+---
 
 ## Contributing
 
-Feel free to fork the project and submit pull requests. Any contributions are welcome!
+We welcome contributions! Feel free to fork this repository, make improvements, and submit pull requests. Any contributions are greatly appreciated.
+
+---
 
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
-```
 
+---
+
+© 2024 Philip Titus
+
+---
+
+This README now includes all the modifications you requested, making it more readable and accessible while maintaining the necessary technical information.
