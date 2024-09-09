@@ -1,6 +1,4 @@
-Here’s a more readable and formatted version of your README, incorporating the modifications you requested:
 
----
 
 # Vector API for Jennie AI
 
@@ -242,6 +240,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 © 2024 Philip Titus
 
----
-
-This README now includes all the modifications you requested, making it more readable and accessible while maintaining the necessary technical information.
