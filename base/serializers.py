@@ -89,6 +89,10 @@ class UserSerializer(serializers.ModelSerializer):
         return date_joined
     
 
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'message', 'read', 'timestamp']
     
 
 
@@ -98,7 +102,7 @@ class UserSerializerWithToken(UserSerializer):
 
     class Meta:
         model = Userr
-        fields = ['id', '_id', 'username', 'email', 'name', 'isAdmin', 'bio', 'token']
+        fields = ['id', '_id', 'username', 'email', 'name', 'isAdmin', 'bio', 'token', 'date_joined']
 
     def get_token(self, obj):
         token = RefreshToken.for_user(obj)
@@ -127,7 +131,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
             uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
             request = self.context.get('request')
-            abslink = f"http://localhost:3000/#/password-reset-confirm/{uidb64}/{token}/"
+            abslink = f"https://jennie-steel.vercel.app/auth/password-reset-confirm/{uidb64}/{token}/"
             print(abslink)
             email_body = f"Hi {user.first_name}, use the link below to reset your password: {abslink} Hurry Up The Link Expires in Two Minutes"
             
@@ -219,9 +223,15 @@ class JobSerializer(serializers.ModelSerializer):
 
 
 class InterviewSerializer(serializers.ModelSerializer):
+    job_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Interview
-        fields = '__all__'
+        fields = '__all__'  # Include all model fields and the new job_name field
+
+    def get_job_name(self, obj):
+        # Return the title of the associated Job model
+        return obj.job.title
 
 
 

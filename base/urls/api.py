@@ -12,6 +12,7 @@ from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 import os
 from base.answers import answers
+from rest_framework.decorators import permission_classes
 
 
 class AnswerListView(APIView):
@@ -154,6 +155,11 @@ class JobCreateView(APIView):
 
 
 
+
+
+
+
+
 class JobUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -210,10 +216,44 @@ class JobDetailView(APIView):
         return Response(serializer.data)
 
 
+from base.serializers import *
 
 
-class JobListView(APIView):
+
+class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        # Get all unread notifications ordered by timestamp
+        notifications = Notification.objects.filter(user=request.user, read=False).order_by('-timestamp')
+
+        # Take the latest 3 unread notifications
+        latest_notifications = notifications[:3]
+
+        # If there are exactly 3 notifications, mark them as read (but use the full queryset)
+        if len(latest_notifications) == 3:
+            notifications.update(read=True)
+
+        # Serialize the notifications
+        serializer = NotificationSerializer(latest_notifications, many=True)
+
+        # Paginate the results
+        paginator = PageNumberPagination()
+        paginator.page_size = 3
+        result_page = paginator.paginate_queryset(latest_notifications, request)
+
+        return paginator.get_paginated_response(serializer.data)
+
+
+
+
+
+
+
+
+@permission_classes([IsAuthenticated])
+class JobListView(APIView):
+    # permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         jobs = Job.objects.filter(user=request.user)
@@ -535,7 +575,7 @@ logger = logging.getLogger(__name__)
 task_queue = Queue()
 
 
-@method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
+# @method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
 class PreparationMaterialCreateView(APIView): 
     permission_classes = [IsAuthenticated]
 
@@ -733,6 +773,35 @@ class PreparationMaterialDeleteView(APIView):
 
 
 
+# class PreparationBlockUpdateView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def put(self, request, *args, **kwargs):
+#         block_id = kwargs.get('block_id')
+#         if not block_id:
+#             return Response({'detail': 'Block ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+#         block = get_object_or_404(PreparationBlock, id=block_id)
+        
+#         # Check if the user has permission to access this resource
+#         if block.preparation_material.job.user != request.user:
+#             return Response({'detail': 'You do not have permission to access this resource.'}, status=status.HTTP_403_FORBIDDEN)
+        
+
+#         # Get the answer from the request data
+#         my_answer = request.data.get('my_answer')
+#         if my_answer is None:
+#             return Response({'detail': 'Answer is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+#         # Update the answer field
+#         block.my_answer = my_answer
+#         block.save()
+        
+#         # Serialize and return the updated block
+#         serializer = PreparationBlockSerializer(block)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class PreparationBlockUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -747,14 +816,18 @@ class PreparationBlockUpdateView(APIView):
         if block.preparation_material.job.user != request.user:
             return Response({'detail': 'You do not have permission to access this resource.'}, status=status.HTTP_403_FORBIDDEN)
         
-
+        # Check if the block has already been attempted
+        if block.attempted:
+            return Response({'detail': 'You have already attempted this question.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         # Get the answer from the request data
         my_answer = request.data.get('my_answer')
         if my_answer is None:
             return Response({'detail': 'Answer is required.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Update the answer field
+        # Update the answer field and set attempted to True
         block.my_answer = my_answer
+        block.attempted = True
         block.save()
         
         # Serialize and return the updated block
@@ -763,7 +836,33 @@ class PreparationBlockUpdateView(APIView):
 
 
 
+# class CodingQuestionUpdateView(APIView):
+#     permission_classes = [IsAuthenticated]
 
+#     def put(self, request, *args, **kwargs):
+#         block_id = kwargs.get('id')
+#         if not block_id:
+#             return Response({'detail': 'Block ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+#         block = get_object_or_404(CodingQuestion, id=block_id)
+        
+#         # Check if the user has permission to access this resource
+#         if block.preparation_material.job.user != request.user:
+#             return Response({'detail': 'You do not have permission to access this resource.'}, status=status.HTTP_403_FORBIDDEN)
+        
+
+#         # Get the answer from the request data
+#         my_answer = request.data.get('my_answer')
+#         if my_answer is None:
+#             return Response({'detail': 'Answer is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+#         # Update the answer field
+#         block.my_answer = my_answer
+#         block.save()
+        
+#         # Serialize and return the updated block
+#         serializer = CodingQuestionSerializer(block)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class CodingQuestionUpdateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -779,14 +878,18 @@ class CodingQuestionUpdateView(APIView):
         if block.preparation_material.job.user != request.user:
             return Response({'detail': 'You do not have permission to access this resource.'}, status=status.HTTP_403_FORBIDDEN)
         
-
+        # Check if the block has already been attempted
+        if block.attempted:
+            return Response({'detail': 'You have already attempted this question.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         # Get the answer from the request data
         my_answer = request.data.get('my_answer')
         if my_answer is None:
             return Response({'detail': 'Answer is required.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Update the answer field
+        # Update the answer field and set attempted to True
         block.my_answer = my_answer
+        block.attempted = True
         block.save()
         
         # Serialize and return the updated block
@@ -799,12 +902,11 @@ class CodingQuestionUpdateView(APIView):
 
 
 
-
 import time
 from django.conf import settings
 
 
-@method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
+# @method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
 class PreparationMaterialMarkingView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1040,6 +1142,236 @@ class InterviewRoomDetailView(APIView):
 
 
 
+# @method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
+# class InterviewRoomCreateView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         self.worker_thread = threading.Thread(target=self.worker)
+#         self.worker_thread.daemon = True
+#         self.worker_thread.start()
+#         genai.configure(api_key=settings.GOOGLE_API_KEY)
+
+#     def generate_token(self):
+#         return uuid.uuid4()
+
+#     def worker(self):
+#         while True:
+#             job_id, token, request = task_queue.get()
+#             try:
+#                 self.process_task(job_id, token, request=request)
+#             except Exception as e:
+#                 logger.error(f"Error processing task: {e}")
+#             finally:
+#                 task_queue.task_done()
+
+#     def process_task(self, job_id, token, request):
+#         try:    
+            
+#             interview = get_object_or_404(Interview, id=job_id)
+#             print(f"Interview found: {interview}")
+
+#             current_time = now()
+
+            
+#             description = interview.job.description
+#             interview_session = InterviewSession.objects.create(interview=interview, start_time=current_time)
+
+#             prompt1 = f"Based on this {description}, will you need to write code in the future? Answer YES or NO. Enclose your response in []."
+#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             response1 = model.generate_content(prompt1)
+#             if not hasattr(response1, '_result'):
+#                 logger.error('Error generating AI response for prompt 1.')
+#                 return
+#             content1 = response1._result.candidates[0].content.parts[0].text.strip()
+#             logger.info(f"AI Response for prompt 1: {content1}")
+#             print(f"AI Response for prompt 1: {content1}")
+
+
+#             questions_and_answers = []
+#             for i in range(6):
+#                 prompt4 = f"Based on this {description}, provide me just one question and its answer which would be asked in the related interview. Make the question 80% more difficult than the actual ones you expect to be asked. Note the answer part should be very detailed and start with the word 'Answer' while the question should start with the word 'Question'. If the description involves an interview that deals with code don't make any question that requires you to give code snippet as an answer. Write question along with its answer."
+#                 response4 = model.generate_content(prompt4)
+#                 if not hasattr(response4, '_result'):
+#                     logger.error(f'Error generating AI response for prompt 4, iteration {i + 1}.')
+#                     return
+#                 content4 = response4._result.candidates[0].content.parts[0].text.strip()
+#                 logger.info(f"AI Response for prompt 4, iteration {i + 1}: {content4}")
+#                 print(f"AI Response for prompt 4, iteration {i + 1}: {content4}")
+
+#                 lines = content4.split('\n')
+#                 question = ""
+#                 answer = ""
+#                 is_question = False
+#                 is_answer = False
+
+#                 for line in lines:
+#                     stripped_line = line.strip()
+#                     if not stripped_line:
+#                         continue
+#                     if 'question' in stripped_line.lower() and not is_question:
+#                         question = stripped_line
+#                         is_question = True
+#                         is_answer = False
+#                     elif 'answer' in stripped_line.lower() and is_question:
+#                         answer = stripped_line
+#                         is_answer = True
+#                         is_question = False
+#                     elif is_question:
+#                         question += ' ' + stripped_line
+#                     elif is_answer:
+#                         answer += ' ' + stripped_line
+
+#                 if question and answer:
+#                     questions_and_answers.append((question, answer))
+
+#                 time.sleep(1)
+
+
+#             for q, a in questions_and_answers:
+#                 InterviewBlock.objects.create(
+#                     session=interview_session,
+#                     question=q,
+#                     answer=a,
+#                     score=0
+#                 )
+
+
+#             logger.info(f"Extracted QA pairs: {questions_and_answers}")
+#             print(f"Extracted QA pairs: {questions_and_answers}")
+#             user_credits = request.user.credits
+#             user = request.user
+#             user.credits = user_credits - 30
+#             user.save()
+
+#             if content1 == "[YES]":
+#                 questions_and_answers_coding = []
+#                 for i in range(3):
+#                     prompt5 = f"Please provide me with just a single interview coding question and its answer given as a code snippet, for this description: {description}. Make it 90% harder than what you would actually expect. FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer' And please number the questions!!!!!!!!!!!!!!!!!!!!!"
+#                     data = {
+#                         "model": "codestral-latest",
+#                         "messages": [{"role": "user", "content": prompt5}]
+#                     }
+
+#                     codestral_response = call_chat_endpoint(data)
+#                     if isinstance(codestral_response, dict):
+#                         ai_response = codestral_response['choices'][0]['message']['content'].strip()
+#                         lines = ai_response.split('\n')
+#                         current_question = ""
+#                         current_answer = ""
+#                         current_language = ""
+#                         is_question = False
+#                         is_answer = False
+
+#                         for line in lines:
+#                             stripped_line = line.strip()
+#                             if not stripped_line:
+#                                 continue
+#                             if 'Question' in stripped_line and not is_question:
+#                                 if current_question and current_answer:
+#                                     current_language = extract_language_from_answer(current_answer)
+#                                     questions_and_answers_coding.append((current_question, current_answer, current_language))
+#                                     current_question = ""
+#                                     current_answer = ""
+#                                     current_language = ""
+#                                 current_question = stripped_line
+#                                 is_question = True
+#                                 is_answer = False
+#                             elif 'Answer' in stripped_line and is_question:
+#                                 current_answer = stripped_line
+#                                 is_answer = True
+#                                 is_question = False
+#                             elif is_question:
+#                                 current_question += ' ' + stripped_line
+#                             elif is_answer:
+#                                 current_answer += ' ' + stripped_line
+
+#                         if current_question and current_answer:
+#                             current_language = extract_language_from_answer(current_answer)
+#                             questions_and_answers_coding.append((current_question, current_answer, current_language))
+                        
+#                         print(f"Codestral AI Response: {ai_response}")
+#                         user_credits = request.user.credits
+#                         user = request.user
+#                         user.credits = user_credits - 20
+#                         user.save()
+
+#                     else:
+#                         print(f"Codestral AI Error: {codestral_response}")
+
+#                     time.sleep(1)
+
+#                 for q, a, lang in questions_and_answers_coding:
+#                     InterviewCodingQuestion.objects.create(
+#                         session=interview_session,
+#                         question=q,
+#                         answer=a,
+#                         language=lang
+#                     )
+            
+#             interview_session.ready = True
+#             interview_session.save()
+#             notification_message = f'Hi {request.user.username}, I am done preparing the interview meeting room please hurry and join!'
+#             Notification.objects.create(user=request.user, message=notification_message)
+
+#         except Exception as e:
+
+
+#             print(f"Error processing task: {e}")
+
+
+
+#     @transaction.atomic
+#     def post(self, request, *args, **kwargs):
+#         if request.user.credits <= 50:
+#             notification_message = f'It seems you are out of credits please upgrade your account or contact support :)'
+#             Notification.objects.create(user=request.user, message=notification_message)
+
+#             return Response({'detail': 'Error you are out of credits upgrade your account or contact support.'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         job_id = request.data.get('job_id')
+#         if not job_id:
+#             return Response({'detail': 'Job ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         interview = get_object_or_404(Interview, id=job_id)
+#         print(f"Interview found: {interview}")
+
+#         current_time = now()
+
+
+#         if interview.interview_datetime and current_time < interview.interview_datetime:
+#                 logger.error('Cannot create a session earlier than the interview datetime.')
+#                 return Response({'detail': 'Cannot create a session earlier than the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+#         if interview.interview_datetime and current_time > interview.interview_datetime + timedelta(hours=5):
+#             logger.error('Cannot create a session more than 5 hours past the interview datetime.')
+#             return Response({'detail': 'Cannot create a session more than 5 hours past the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+#         if InterviewSession.objects.filter(interview=interview).count() >= 2:
+#             logger.error('Cannot create more than 2 sessions for the same interview.')
+#             return Response({'detail': 'Cannot create more than 2 sessions for the same interview..'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+#         if InterviewSession.objects.filter(interview=interview, expired=False).exists():
+#             logger.error('Cannot create a new session when there is an unexpired session for the same interview.')
+#             return Response({'detail': 'Cannot create a new session when there is an unexpired session for the same interview.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+#         current_time = now()
+#         token = self.generate_token()
+#         response_data = {"token": str(token)}
+#         response = Response(response_data, status=status.HTTP_200_OK)
+
+#         task_queue.put((job_id, token, request))
+
+#         return response
+
+logger = logging.getLogger(__name__)
+task_queue = Queue()
+
 @method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
 class InterviewRoomCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1056,6 +1388,7 @@ class InterviewRoomCreateView(APIView):
 
     def worker(self):
         while True:
+            # Retrieve the three values from the queue
             job_id, token, request = task_queue.get()
             try:
                 self.process_task(job_id, token, request=request)
@@ -1065,14 +1398,12 @@ class InterviewRoomCreateView(APIView):
                 task_queue.task_done()
 
     def process_task(self, job_id, token, request):
-        try:    
-            
+        try:
             interview = get_object_or_404(Interview, id=job_id)
             print(f"Interview found: {interview}")
 
             current_time = now()
 
-            
             description = interview.job.description
             interview_session = InterviewSession.objects.create(interview=interview, start_time=current_time)
 
@@ -1085,7 +1416,6 @@ class InterviewRoomCreateView(APIView):
             content1 = response1._result.candidates[0].content.parts[0].text.strip()
             logger.info(f"AI Response for prompt 1: {content1}")
             print(f"AI Response for prompt 1: {content1}")
-
 
             questions_and_answers = []
             for i in range(6):
@@ -1126,7 +1456,6 @@ class InterviewRoomCreateView(APIView):
 
                 time.sleep(1)
 
-
             for q, a in questions_and_answers:
                 InterviewBlock.objects.create(
                     session=interview_session,
@@ -1134,7 +1463,6 @@ class InterviewRoomCreateView(APIView):
                     answer=a,
                     score=0
                 )
-
 
             logger.info(f"Extracted QA pairs: {questions_and_answers}")
             print(f"Extracted QA pairs: {questions_and_answers}")
@@ -1214,11 +1542,7 @@ class InterviewRoomCreateView(APIView):
             Notification.objects.create(user=request.user, message=notification_message)
 
         except Exception as e:
-
-
             print(f"Error processing task: {e}")
-
-
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
@@ -1237,43 +1561,38 @@ class InterviewRoomCreateView(APIView):
 
         current_time = now()
 
-
         if interview.interview_datetime and current_time < interview.interview_datetime:
-                logger.error('Cannot create a session earlier than the interview datetime.')
-                return Response({'detail': 'Cannot create a session earlier than the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
-
+            logger.error('Cannot create a session earlier than the interview datetime.')
+            return Response({'detail': 'Cannot create a session earlier than the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if interview.interview_datetime and current_time > interview.interview_datetime + timedelta(hours=5):
-            logger.error('Cannot create a session more than 5 hours past the interview datetime.')
-            return Response({'detail': 'Cannot create a session more than 5 hours past the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error('Cannot create a session more than 5 hours after the interview datetime.')
+            return Response({'detail': 'Cannot create a session more than 5 hours after the interview datetime.'}, status=status.HTTP_400_BAD_REQUEST)
 
-
-        if InterviewSession.objects.filter(interview=interview).count() >= 2:
-            logger.error('Cannot create more than 2 sessions for the same interview.')
-            return Response({'detail': 'Cannot create more than 2 sessions for the same interview..'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-        if InterviewSession.objects.filter(interview=interview, expired=False).exists():
-            logger.error('Cannot create a new session when there is an unexpired session for the same interview.')
-            return Response({'detail': 'Cannot create a new session when there is an unexpired session for the same interview.'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-        current_time = now()
         token = self.generate_token()
-        response_data = {"token": str(token)}
-        response = Response(response_data, status=status.HTTP_200_OK)
 
         task_queue.put((job_id, token, request))
+        logger.info(f'Task added to the queue with job_id: {job_id}, token: {token}')
 
-        return response
-
-
+        return Response({'message': 'Task added to queue. Processing will start soon.', 'token': token})
 
 from asgiref.sync import sync_to_async
 import time
 from .tasks import create_interview_session_task
 
  
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class InterviewBlockUpdateView(APIView):
@@ -1354,7 +1673,7 @@ class InterviewCodingQuestionUpdateView(APIView):
 
 
 
-@method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
+# @method_decorator(ratelimit(key='ip', rate='1/2m', block=True), name='dispatch')
 class InterviewRoomMarkingView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1490,9 +1809,13 @@ class InterviewRoomMarkingView(APIView):
         user_failed = request.user.failed
 
         if overall_score > 50 :
+            user = request.user
             user.passed = user_passed + 1
+            user.save()
         else:
+            user = request.user
             user.failed = user_failed + 1
+            user.save()
            
 
 
@@ -1547,9 +1870,9 @@ class GetAgentView(APIView):
                 serializer = AsisstantSerializer(agent)
                 if agent.ready == False:
                     return Response({'detail': 'Your Material Is Not Ready Yet please come back later.'}, status=status.HTTP_409_CONFLICT)
-
-                agent.ready = False
-                agent.save()
+                else:
+                    agent.ready = False
+                    agent.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "No agent response exists for this user."}, status=status.HTTP_404_NOT_FOUND)
@@ -1689,6 +2012,15 @@ class AskAgentView(APIView):
         task_queue.put((session_id, query, question, request, token))
 
         return response
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1870,8 +2202,9 @@ class GetCodeView(APIView):
                 serializer = CodeSerializer(code)
                 if code.ready == False:
                     return Response({'detail': 'Your Material Is Not Ready Yet please come back later.'}, status=status.HTTP_409_CONFLICT)
-                code.ready = False
-                code.save()
+                else: 
+                    code.ready = False
+                    code.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "No code exists for this user."}, status=status.HTTP_404_NOT_FOUND)
