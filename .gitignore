@@ -102,3 +102,4 @@ management/
 
 # GCP app configuration
 app.yaml
+settings.py

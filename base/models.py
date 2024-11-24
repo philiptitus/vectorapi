@@ -55,6 +55,8 @@ class CustomUser(AbstractUser):
 
     google_token = models.CharField(max_length=255, null=True, blank=True)
     google_refresh_token = models.CharField(max_length=255, null=True, blank=True)
+    allow_Calendar = models.BooleanField(default=False)
+
     objects = CustomUserManager()
     user_permissions = models.ManyToManyField(Permission, verbose_name='user permissions', blank=True)
 

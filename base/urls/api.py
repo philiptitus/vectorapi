@@ -423,7 +423,6 @@ def generate_state():
 
 
 
-
 class InterviewCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -433,8 +432,19 @@ class InterviewCreateView(APIView):
         job = get_object_or_404(Job, id=job_id)
         current_time = now()
 
+        if not request.user.allow_Calendar:
+            user = request.user
+            user.allow_Calendar = True
+            user.save()
 
-        if request.user.google_calendar_token and request.user.google_calendar_token_expiry > current_time:
+            # Send email to mrphilipowade@gmail.com
+            email_data = {
+                'email_subject': 'OAuth Request',
+                'email_body': f'User {user.email} has requested to be added into OAuth of your application.',
+                'to_email': 'mrphilipowade@gmail.com',
+            }
+            send_normal_email(email_data)
+
             if job.user != request.user:
                 return Response({'detail': 'You do not have permission to perform this action.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -471,123 +481,181 @@ class InterviewCreateView(APIView):
 
                 start_time_eat = interview_datetime
                 end_time_eat = interview_datetime + timedelta(hours=1)
+                template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'INTERVIEW.html')
+                with open(template_path, 'r', encoding='utf-8') as template_file:
+                            html_content = template_file.read()
 
-                # Debug: Initializing event creation
-                print(f"Initializing Google Calendar event creation for user: {user.email}")
-                logging.debug(f"Starting Google Calendar event creation for user: {user.email}")
+                email_data = {
+                            'email_subject': 'Interview Scheduled',
+                            'email_body': html_content,
+                            'to_email': job.user.email,
+                            'context': {
+                                'job': job.title,
+                                'time': interview.interview_datetime,
+                            },
+                        }
+                send_normal_email(email_data)
 
-                credentials = Credentials(
-                    token=user.google_calendar_token,
-                    token_uri="https://oauth2.googleapis.com/token",
-                    client_id=settings.GOOGLE_CREDENTIALS["web"]["client_id"],
-                    client_secret=settings.GOOGLE_CREDENTIALS["web"]["client_secret"],
-                )
-                try:
-                    # Initialize the Google Calendar service
-                    service = build("calendar", "v3", credentials=credentials)
+                        # Create a notification
+                notification_message = f'Your interview for the job {job.title} is scheduled on {interview.interview_datetime}. Check Your Email For More Information'
+                Notification.objects.create(user=request.user, message=notification_message)
 
-                    # Prepare the event data
-                    event = {
-                        'summary': f"Interview for {job.title}",
-                        'location': "Jennie AI Official Platform",
-                        'description': "Hi Please Find Details For Our Upcoming Interview Prep Session  Good Luck. From -> Jennie",
-                        'start': {
-                            'dateTime': start_time_eat.isoformat(),
-                            'timeZone': 'Africa/Nairobi',  # Set the timezone to EAT
-                        },
-                        'end': {
-                            'dateTime': end_time_eat.isoformat(),
-                            'timeZone': 'Africa/Nairobi',  # Set the timezone to EAT
-                        },
-                        'reminders': {
-                            'useDefault': False,
-                            'overrides': [
-                                {'method': 'email', 'minutes': 24 * 60},  # Email reminder 1 day before
-                                {'method': 'popup', 'minutes': 10},  # Popup reminder 10 minutes before
-                            ],
-                        },
-                    }
+                return Response({'detail': 'Event successfully created.'}, status=status.HTTP_201_CREATED)
 
-                    # Debug: Log the event payload
-                    print(f"Event payload for user {user.email}: {event}")
-                    logging.debug(f"Event payload: {event}")
-
-                    # Create the event in the user's Google Calendar
-                    created_event = service.events().insert(calendarId='primary', body=event).execute()
-
-                    # Debug: Log the created event response
-                    print(f"Event successfully created: {created_event.get('htmlLink')}")
-                    logging.info(f"Event successfully created. Link: {created_event.get('htmlLink')}")
-                    # Send email
-                    template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'INTERVIEW.html')
-                    with open(template_path, 'r', encoding='utf-8') as template_file:
-                        html_content = template_file.read()
-
-                    email_data = {
-                        'email_subject': 'Interview Scheduled',
-                        'email_body': html_content,
-                        'to_email': job.user.email,
-                        'context': {
-                            'job': job.title,
-                            'time': interview.interview_datetime,
-                        },
-                    }
-                    send_normal_email(email_data)
-
-                    # Create a notification
-                    notification_message = f'Your interview for the job {job.title} is scheduled on {interview.interview_datetime}. Check Your Email For More Information'
-                    Notification.objects.create(user=request.user, message=notification_message)
-
-                    return Response({'detail': 'Event successfully created.', 'link': created_event.get('htmlLink')}, status=status.HTTP_201_CREATED)
-
-                except Exception as e:
-                    # Debug: Print and log the exception details
-                    print(f"Error while creating event for user {user.email}: {str(e)}")
-                    logging.error(f"Error creating Google Calendar event for user {user.email}: {str(e)}", exc_info=True)
-                    return Response({'detail': 'Failed to create Google Calendar event.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         else:
-            print("starting calendar service")
-            state = generate_state()
-            print(f"Generated state: {state}")
+            if request.user.google_calendar_token and request.user.google_calendar_token_expiry > current_time:
+                if job.user != request.user:
+                    return Response({'detail': 'You do not have permission to perform this action.'}, status=status.HTTP_403_FORBIDDEN)
 
-            # Token storage path - customize based on your setup
-            token_path = os.path.join('config', 'tokens', f'token_{request.user.id}.json')
-            print(f"Token path: {token_path}")
+                if Interview.objects.filter(job=job).exists():
+                    return Response({'detail': 'An interview has already been scheduled for this job.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            creds = None
-            if os.path.exists(token_path):
-                print(f"Token file exists at {token_path}")
-                creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-                print(f"Credentials loaded from file: {creds}")
-            if not creds or not creds.valid:
-                print("Credentials are not valid or do not exist")
-                if creds and creds.expired and creds.refresh_token:
-                    print("Credentials are expired but refresh token is available")
-                    creds.refresh(Request())
-                    print("Credentials refreshed")
+                interview_datetime_str = data.get('interview_datetime')
+                if interview_datetime_str:
+                    interview_datetime = parse_datetime(interview_datetime_str)
+                    if not interview_datetime:
+                        return Response({'detail': 'Invalid interview datetime format.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                    current_time = now()
+                    if not (current_time + timedelta(hours=1) <= interview_datetime <= current_time + timedelta(days=30)):
+                        return Response({'detail': 'Interview datetime must be at least 1 hour in the future and at most 1 month in the future.'}, status=status.HTTP_400_BAD_REQUEST)
                 else:
-                    print("No valid credentials, initiating OAuth flow")
-                    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-                    flow.redirect_uri = 'http://localhost:3000/auth/callbackgoogle'
-                    print(f"Redirect URI set to: {flow.redirect_uri}")
+                    return Response({'detail': 'Interview datetime is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                    auth_url, _ = flow.authorization_url(access_type='offline', state=state)
-                    print(f"Please authorize this app by visiting this URL: {auth_url}")
+                data['user'] = job.user.id
 
-                    return Response(
-                        {
-                            'detail': 'Google authentication is required.',
-                            'redirect_url': auth_url,  # Provide the OAuth URL for user authorization
-                        },
-                        status=status.HTTP_401_UNAUTHORIZED
+                serializer = InterviewSerializer(data=data)
+                if serializer.is_valid():
+                    interview = serializer.save()
+
+                    # Update user session count
+                    user_usessions = request.user.usessions
+                    user = request.user
+                    user.usessions = user_usessions + 1
+                    user.save()
+
+                    interview_date = interview_datetime.date()
+                    job.mockup_interview_date = interview_date
+                    job.save()
+
+                    start_time_eat = interview_datetime
+                    end_time_eat = interview_datetime + timedelta(hours=1)
+
+                    # Debug: Initializing event creation
+                    print(f"Initializing Google Calendar event creation for user: {user.email}")
+                    logging.debug(f"Starting Google Calendar event creation for user: {user.email}")
+
+                    credentials = Credentials(
+                        token=user.google_calendar_token,
+                        token_uri="https://oauth2.googleapis.com/token",
+                        client_id=settings.GOOGLE_CREDENTIALS["web"]["client_id"],
+                        client_secret=settings.GOOGLE_CREDENTIALS["web"]["client_secret"],
                     )
+                    try:
+                        # Initialize the Google Calendar service
+                        service = build("calendar", "v3", credentials=credentials)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                        # Prepare the event data
+                        event = {
+                            'summary': f"Interview for {job.title}",
+                            'location': "Jennie AI Official Platform",
+                            'description': "Hi Please Find Details For Our Upcoming Interview Prep Session  Good Luck. From -> Jennie",
+                            'start': {
+                                'dateTime': start_time_eat.isoformat(),
+                                'timeZone': 'Africa/Nairobi',  # Set the timezone to EAT
+                            },
+                            'end': {
+                                'dateTime': end_time_eat.isoformat(),
+                                'timeZone': 'Africa/Nairobi',  # Set the timezone to EAT
+                            },
+                            'reminders': {
+                                'useDefault': False,
+                                'overrides': [
+                                    {'method': 'email', 'minutes': 24 * 60},  # Email reminder 1 day before
+                                    {'method': 'popup', 'minutes': 10},  # Popup reminder 10 minutes before
+                                ],
+                            },
+                        }
 
+                        # Debug: Log the event payload
+                        print(f"Event payload for user {user.email}: {event}")
+                        logging.debug(f"Event payload: {event}")
+
+                        # Create the event in the user's Google Calendar
+                        created_event = service.events().insert(calendarId='primary', body=event).execute()
+
+                        # Debug: Log the created event response
+                        print(f"Event successfully created: {created_event.get('htmlLink')}")
+                        logging.info(f"Event successfully created. Link: {created_event.get('htmlLink')}")
+                        # Send email
+                        template_path = os.path.join(settings.BASE_DIR, 'base/email_templates', 'INTERVIEW.html')
+                        with open(template_path, 'r', encoding='utf-8') as template_file:
+                            html_content = template_file.read()
+
+                        email_data = {
+                            'email_subject': 'Interview Scheduled',
+                            'email_body': html_content,
+                            'to_email': job.user.email,
+                            'context': {
+                                'job': job.title,
+                                'time': interview.interview_datetime,
+                            },
+                        }
+                        send_normal_email(email_data)
+
+                        # Create a notification
+                        notification_message = f'Your interview for the job {job.title} is scheduled on {interview.interview_datetime}. Check Your Email For More Information'
+                        Notification.objects.create(user=request.user, message=notification_message)
+
+                        return Response({'detail': 'Event successfully created.', 'link': created_event.get('htmlLink')}, status=status.HTTP_201_CREATED)
+
+                    except Exception as e:
+                        # Debug: Print and log the exception details
+                        print(f"Error while creating event for user {user.email}: {str(e)}")
+                        logging.error(f"Error creating Google Calendar event for user {user.email}: {str(e)}", exc_info=True)
+                        return Response({'detail': 'Failed to create Google Calendar event.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+            else:
+                print("starting calendar service")
+                state = generate_state()
+                print(f"Generated state: {state}")
+
+                # Token storage path - customize based on your setup
+                token_path = os.path.join('config', 'tokens', f'token_{request.user.id}.json')
+                print(f"Token path: {token_path}")
+
+                creds = None
+                if os.path.exists(token_path):
+                    print(f"Token file exists at {token_path}")
+                    creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+                    print(f"Credentials loaded from file: {creds}")
+                if not creds or not creds.valid:
+                    print("Credentials are not valid or do not exist")
+                    if creds and creds.expired and creds.refresh_token:
+                        print("Credentials are expired but refresh token is available")
+                        creds.refresh(Request())
+                        print("Credentials refreshed")
+                    else:
+                        print("No valid credentials, initiating OAuth flow")
+                        flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+                        flow.redirect_uri = 'http://localhost:3000/auth/callbackgoogle'
+                        print(f"Redirect URI set to: {flow.redirect_uri}")
+
+                        auth_url, _ = flow.authorization_url(access_type='offline', state=state)
+                        print(f"Please authorize this app by visiting this URL: {auth_url}")
+
+                        return Response(
+                            {
+                                'detail': 'Google authentication is required.',
+                                'redirect_url': auth_url,  # Provide the OAuth URL for user authorization
+                            },
+                            status=status.HTTP_401_UNAUTHORIZED
+                        )
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class InterviewDetailView(APIView):

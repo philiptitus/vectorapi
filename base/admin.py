@@ -7,7 +7,7 @@ from .models import *
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
-    list_display = ('email', 'username', 'auth_provider', 'is_staff', 'is_active', 'bio', "credits",'date_joined', 'avi', 'isPrivate')
+    list_display = ('email', 'username', 'auth_provider', 'is_staff', 'is_active', 'bio', "credits",'date_joined', 'avi', 'isPrivate',"allow_Calendar")
     list_filter = ('email', 'username', 'is_staff', 'is_active', 'auth_provider',)
     fieldsets = (
         (None, {'fields': ('email', 'username', 'password',"google_calendar_token","google_calendar_refresh_token","google_calendar_token_expiry")}),
