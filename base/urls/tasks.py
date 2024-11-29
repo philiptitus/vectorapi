@@ -39,7 +39,7 @@ def mark_interview_room(material_id):
             "Please provide the score in the following format:\n\n"
             f"Question {block.id}: <score>"
         )
-        model = genai.GenerativeModel('gemini-1.0-pro-latest')
+        model = genai.GenerativeModel('gemini-1.5-pro-001')
         response = model.generate_content(prompt)
 
         try:
@@ -133,7 +133,7 @@ def create_interview_session_task(job_id, user_id):
 
         # Prompt 1
         prompt1 = f"Based on this {description}, will you need to write code in the future? Answer YES or NO. Enclose your response in []."
-        model = genai.GenerativeModel('gemini-1.0-pro-latest')
+        model = genai.GenerativeModel('gemini-1.5-pro-001')
         response1 = model.generate_content(prompt1)
         content1 = response1._result.candidates[0].content.parts[0].text.strip()
         print(f"Prompt 1 response: {content1}")

@@ -108,7 +108,7 @@ class JobCreateView(APIView):
                 f"summarize this description in 200 words or less for me {ai_description}. Please enclose your response in these []"
             )
 
-            model = genai.GenerativeModel('gemini-1.0-pro-latest')  # Use the Generative AI model
+            model = genai.GenerativeModel('gemini-1.5-pro-001')  # Use the Generative AI model
             response = model.generate_content(prompt)
             if not hasattr(response, '_result'):
                 return Response({'detail': 'Error generating preparation blocks.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -641,7 +641,8 @@ class InterviewCreateView(APIView):
                     else:
                         print("No valid credentials, initiating OAuth flow")
                         flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-                        flow.redirect_uri = 'http://localhost:3000/auth/callbackgoogle'
+                        flow.redirect_uri = 'https://jennie-steel.vercel.app/auth/callbackgoogle'
+                        
                         print(f"Redirect URI set to: {flow.redirect_uri}")
 
                         auth_url, _ = flow.authorization_url(access_type='offline', state=state)
@@ -903,7 +904,7 @@ task_queue = Queue()
 
 #             # Prompt 1
 #             prompt1 = f"Based on this {description}, will you need to write code or know about programming languages in this job? Answer YES or NO. Enclose your response in []."
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response1 = model.generate_content(prompt1)
 #             content1 = response1._result.candidates[0].content.parts[0].text.strip()
 #             print(content1)
@@ -1079,7 +1080,7 @@ class PreparationMaterialCreateView(APIView):
 
             # Prompt 1
             prompt1 = f"Based on this {description}, will you need to write code or know about programming languages in this job? Answer YES or NO. Enclose your response in []."
-            model = genai.GenerativeModel('gemini-1.0-pro-latest')
+            model = genai.GenerativeModel('gemini-1.5-pro-001')
             response1 = model.generate_content(prompt1)
             content1 = response1._result.candidates[0].content.parts[0].text.strip()
             print(content1)
@@ -1407,7 +1408,7 @@ from django.conf import settings
 #                 "Please provide the score in the following format:\n\n"
 #                 "Question {block.id}: <score>"
 #             )
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response = model.generate_content(prompt)
 
 #             try:
@@ -1585,7 +1586,7 @@ class PreparationMaterialMarkingView(APIView):
                     "Please provide the score in the following format:\n\n"
                     "Question {block.id}: <score>"
                 )
-                model = genai.GenerativeModel('gemini-1.0-pro-latest')
+                model = genai.GenerativeModel('gemini-1.5-pro-001')
                 response = model.generate_content(prompt)
 
                 try:
@@ -1778,7 +1779,7 @@ class InterviewRoomDetailView(APIView):
 #             interview_session = InterviewSession.objects.create(interview=interview, start_time=current_time)
 
 #             prompt1 = f"Based on this {description}, will you need to write code in the future? Answer YES or NO. Enclose your response in []."
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response1 = model.generate_content(prompt1)
 #             if not hasattr(response1, '_result'):
 #                 logger.error('Error generating AI response for prompt 1.')
@@ -2008,7 +2009,7 @@ task_queue = Queue()
 #             interview_session = InterviewSession.objects.create(interview=interview, start_time=current_time)
 
 #             prompt1 = f"Based on this {description}, will you need to write code or know about programming languages in this job? Answer YES or NO. Enclose your response in []."
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response1 = model.generate_content(prompt1)
 #             if not hasattr(response1, '_result'):
 #                 logger.error('Error generating AI response for prompt 1.')
@@ -2215,7 +2216,7 @@ task_queue = Queue()
 #             interview_session = InterviewSession.objects.create(interview=interview, start_time=current_time)
 
 #             prompt1 = f"Based on this {description}, will you need to write code or know about programming languages in this job? Answer YES or NO. Enclose your response in []."
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response1 = model.generate_content(prompt1)
 #             if not hasattr(response1, '_result'):
 #                 logger.error('Error generating AI response for prompt 1.')
@@ -2397,7 +2398,7 @@ class InterviewRoomCreateView(APIView):
             interview_session = InterviewSession.objects.create(interview=interview, start_time=current_time)
 
             prompt1 = f"Based on this {description}, will you need to write code or know about programming languages in this job? Answer YES or NO. Enclose your response in []."
-            model = genai.GenerativeModel('gemini-1.0-pro-latest')
+            model = genai.GenerativeModel('gemini-1.5-pro-001')
             response1 = model.generate_content(prompt1)
             if not hasattr(response1, '_result'):
                 logger.error('Error generating AI response for prompt 1.')
@@ -2679,7 +2680,7 @@ class InterviewCodingQuestionUpdateView(APIView):
 #                 "Please provide the score in the following format:\n\n"
 #                 f"Question {block.id}: <score>"
 #             )
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response = model.generate_content(prompt)
 
 #             try:
@@ -2870,7 +2871,7 @@ class InterviewCodingQuestionUpdateView(APIView):
 #                 "Please provide the score in the following format:\n\n"
 #                 f"Question {block.id}: <score>"
 #             )
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response = model.generate_content(prompt)
 
 #             try:
@@ -3059,7 +3060,7 @@ class InterviewRoomMarkingView(APIView):
                     "Please provide the score in the following format:\n\n"
                     f"Question {block.id}: <score>"
                 )
-                model = genai.GenerativeModel('gemini-1.0-pro-latest')
+                model = genai.GenerativeModel('gemini-1.5-pro-001')
                 response = model.generate_content(prompt)
 
                 try:
@@ -3287,7 +3288,7 @@ from base.models import Asisstant
 
 #         # Generate response using genai
 #         try:
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response = model.generate_content(prompt)
 #             if not hasattr(response, '_result'):
 #                 raise ValueError("Invalid response structure from AI model")
@@ -3422,7 +3423,7 @@ from base.models import Asisstant
 
 #         # Generate response using genai
 #         try:
-#             model = genai.GenerativeModel('gemini-1.0-pro-latest')
+#             model = genai.GenerativeModel('gemini-1.5-pro-001')
 #             response = model.generate_content(prompt)
 #             if not hasattr(response, '_result'):
 #                 raise ValueError("Invalid response structure from AI model")
@@ -3551,7 +3552,7 @@ class AskAgentView(APIView):
 
             # Generate response using genai
             try:
-                model = genai.GenerativeModel('gemini-1.0-pro-latest')
+                model = genai.GenerativeModel('gemini-1.5-pro-001')
                 response = model.generate_content(prompt)
                 if not hasattr(response, '_result'):
                     raise ValueError("Invalid response structure from AI model")

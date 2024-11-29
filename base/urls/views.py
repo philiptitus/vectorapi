@@ -133,7 +133,7 @@ class GoogleAuthView(APIView):
             settings.GOOGLE_CREDENTIALS,
             scopes=["https://www.googleapis.com/auth/calendar.events"],
         )
-        flow.redirect_uri = settings.GOOGLE_CREDENTIALS["web"]["redirect_uris"][1]
+        flow.redirect_uri = settings.GOOGLE_CREDENTIALS["web"]["redirect_uris"][3]
 
         try:
             # Fetch tokens using the auth code
