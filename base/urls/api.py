@@ -2461,70 +2461,71 @@ class InterviewRoomCreateView(APIView):
             user.credits = user_credits - 30
             user.save()
 
-            if content1 == "[YES]":
-                questions_and_answers_coding = []
-                for i in range(3):
-                    prompt5 = f"Please provide me with just a single interview coding question and its answer given as a code snippet, for this description: {description}. Make it 10% harder than what you would actually expect. FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer' And please number the questions!!!!!!!!!!!!!!!!!!!!!"
-                    data = {
-                        "model": "codestral-latest",
-                        "messages": [{"role": "user", "content": prompt5}]
-                    }
+            # if content1 == "[YES]":
+            #     questions_and_answers_coding = []
+            #     for i in range(3):
+            #         prompt5 = f"Please provide me with just a single interview coding question and its answer given as a code snippet, for this description: {description}. Make it 10% harder than what you would actually expect. FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer', FOR EASY IDENTIFICATION LABEL THE QUESTION AS 'Question' and the answer as 'Answer' And please number the questions!!!!!!!!!!!!!!!!!!!!!"
+            #         data = {
+            #             "model": "codestral-latest",
+            #             "messages": [{"role": "user", "content": prompt5}]
+            #         }
 
-                    codestral_response = call_chat_endpoint(data)
-                    if isinstance(codestral_response, dict):
-                        ai_response = codestral_response['choices'][0]['message']['content'].strip()
-                        lines = ai_response.split('\n')
-                        current_question = ""
-                        current_answer = ""
-                        current_language = ""
-                        is_question = False
-                        is_answer = False
+            #         codestral_response = call_chat_endpoint(data)
+            #         if isinstance(codestral_response, dict):
+            #             ai_response = codestral_response['choices'][0]['message']['content'].strip()
+            #             lines = ai_response.split('\n')
+            #             current_question = ""
+            #             current_answer = ""
+            #             current_language = ""
+            #             is_question = False
+            #             is_answer = False
 
-                        for line in lines:
-                            stripped_line = line.strip()
-                            if not stripped_line:
-                                continue
-                            if 'Question' in stripped_line and not is_question:
-                                if current_question and current_answer:
-                                    current_language = extract_language_from_answer(current_answer)
-                                    questions_and_answers_coding.append((current_question, current_answer, current_language))
-                                    current_question = ""
-                                    current_answer = ""
-                                    current_language = ""
-                                current_question = stripped_line
-                                is_question = True
-                                is_answer = False
-                            elif 'Answer' in stripped_line and is_question:
-                                current_answer = stripped_line
-                                is_answer = True
-                                is_question = False
-                            elif is_question:
-                                current_question += ' ' + stripped_line
-                            elif is_answer:
-                                current_answer += ' ' + stripped_line
+            #             for line in lines:
+            #                 stripped_line = line.strip()
+            #                 if not stripped_line:
+            #                     continue
+            #                 if 'Question' in stripped_line and not is_question:
+            #                     if current_question and current_answer:
+            #                         current_language = extract_language_from_answer(current_answer)
+            #                         questions_and_answers_coding.append((current_question, current_answer, current_language))
+            #                         current_question = ""
+            #                         current_answer = ""
+            #                         current_language = ""
+            #                     current_question = stripped_line
+            #                     is_question = True
+            #                     is_answer = False
+            #                 elif 'Answer' in stripped_line and is_question:
+            #                     current_answer = stripped_line
+            #                     is_answer = True
+            #                     is_question = False
+            #                 elif is_question:
+            #                     current_question += ' ' + stripped_line
+            #                 elif is_answer:
+            #                     current_answer += ' ' + stripped_line
 
-                        if current_question and current_answer:
-                            current_language = extract_language_from_answer(current_answer)
-                            questions_and_answers_coding.append((current_question, current_answer, current_language))
+            #             if current_question and current_answer:
+            #                 current_language = extract_language_from_answer(current_answer)
+            #                 questions_and_answers_coding.append((current_question, current_answer, current_language))
 
-                        print(f"Codestral AI Response: {ai_response}")
-                        user_credits = request.user.credits
-                        user = request.user
-                        user.credits = user_credits - 20
-                        user.save()
+            #             print(f"Codestral AI Response: {ai_response}")
+            #             user_credits = request.user.credits
+            #             user = request.user
+            #             user.credits = user_credits - 20
+            #             user.save()
 
-                    else:
-                        print(f"Codestral AI Error: {codestral_response}")
+            #         else:
+            #             print(f"Codestral AI Error: {codestral_response}")
 
-                    time.sleep(1)
+            #         time.sleep(1)
 
-                for q, a, lang in questions_and_answers_coding:
-                    InterviewCodingQuestion.objects.create(
-                        session=interview_session,
-                        question=q,
-                        answer=a,
-                        language=lang
-                    )
+            #     for q, a, lang in questions_and_answers_coding:
+            #         InterviewCodingQuestion.objects.create(
+            #             session=interview_session,
+            #             question=q,
+            #             answer=a,
+            #             language=lang
+            #         )
+
 
             interview_session.ready = True
             interview_session.save()
