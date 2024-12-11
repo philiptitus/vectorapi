@@ -2408,7 +2408,7 @@ class InterviewRoomCreateView(APIView):
             print(f"AI Response for prompt 1: {content1}")
 
             questions_and_answers = []
-            for i in range(6):
+            for i in range(4):
                 prompt4 = f"Based on this {description}, provide me just one question and its answer which would be asked in the related interview. Make the question 10% more difficult than the actual ones you expect to be asked. Note the answer part should be very detailed and start with the word 'Answer' while the question should start with the word 'Question'. If the description involves an interview that deals with code don't make any question that requires you to give code snippet as an answer. Write question along with its answer."
                 response4 = model.generate_content(prompt4)
                 if not hasattr(response4, '_result'):
