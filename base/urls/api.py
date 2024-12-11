@@ -1143,55 +1143,55 @@ class PreparationMaterialCreateView(APIView):
             user.save()
 
             # If Prompt 1's response is "[YES]"
-            if content1 == "[YES]":
-                user_credits = request.user.credits
-                user = request.user
-                user.credits = user_credits - 20
-                user.save()
-                prompt5 = f"Please provide me with some interview coding questions that include answers given as code snippets, for: {title}"
-                data = {
-                    "model": "codestral-latest",
-                    "messages": [{"role": "user", "content": prompt5}]
-                }
+            # if content1 == "[YES]":
+            #     user_credits = request.user.credits
+            #     user = request.user
+            #     user.credits = user_credits - 20
+            #     user.save()
+            #     prompt5 = f"Please provide me with some interview coding questions that include answers given as code snippets, for: {title}"
+            #     data = {
+            #         "model": "codestral-latest",
+            #         "messages": [{"role": "user", "content": prompt5}]
+            #     }
 
-                codestral_response = call_chat_endpoint(data)
-                if isinstance(codestral_response, dict):
-                    ai_response = codestral_response['choices'][0]['message']['content'].strip()
-                    lines = ai_response.split('\n')
+            #     codestral_response = call_chat_endpoint(data)
+            #     if isinstance(codestral_response, dict):
+            #         ai_response = codestral_response['choices'][0]['message']['content'].strip()
+            #         lines = ai_response.split('\n')
 
-                    current_question = ""
-                    current_answer = ""
-                    current_language = ""
-                    in_answer = False
+            #         current_question = ""
+            #         current_answer = ""
+            #         current_language = ""
+            #         in_answer = False
 
-                    for line in lines:
-                        if "Question:" in line:
-                            if current_question and current_answer:
-                                current_language = extract_language_from_answer(current_answer)
-                                CodingQuestion.objects.create(
-                                    preparation_material=preparation_material,
-                                    question=current_question,
-                                    answer=current_answer,
-                                    language=current_language
-                                )
-                                current_answer = ""
-                                current_language = ""
-                            current_question = line.split("Question:")[1].strip()
-                            in_answer = False
-                        elif "Answer:" in line:
-                            in_answer = True
-                            current_answer = line.split("Answer:")[1].strip()
-                        elif in_answer:
-                            current_answer += '\n' + line.strip()
+            #         for line in lines:
+            #             if "Question:" in line:
+            #                 if current_question and current_answer:
+            #                     current_language = extract_language_from_answer(current_answer)
+            #                     CodingQuestion.objects.create(
+            #                         preparation_material=preparation_material,
+            #                         question=current_question,
+            #                         answer=current_answer,
+            #                         language=current_language
+            #                     )
+            #                     current_answer = ""
+            #                     current_language = ""
+            #                 current_question = line.split("Question:")[1].strip()
+            #                 in_answer = False
+            #             elif "Answer:" in line:
+            #                 in_answer = True
+            #                 current_answer = line.split("Answer:")[1].strip()
+            #             elif in_answer:
+            #                 current_answer += '\n' + line.strip()
 
-                    if current_question and current_answer:
-                        current_language = extract_language_from_answer(current_answer)
-                        CodingQuestion.objects.create(
-                            preparation_material=preparation_material,
-                            question=current_question,
-                            answer=current_answer,
-                            language=current_language
-                        )
+            #         if current_question and current_answer:
+            #             current_language = extract_language_from_answer(current_answer)
+            #             CodingQuestion.objects.create(
+            #                 preparation_material=preparation_material,
+            #                 question=current_question,
+            #                 answer=current_answer,
+            #                 language=current_language
+            #             )
 
             preparation_material.ready = True
             preparation_material.save()

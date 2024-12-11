@@ -6,8 +6,8 @@ def search_google(query):
     api_key = settings.GOOGLE_SEARCH_API_KEY
     cse_id = settings.GOOGLE_CUSTOM_SEARCH_ENGINE_ID
 
-    # Build the service
-    service = build("customsearch", "v1", developerKey=api_key)
+    # Build the service with cache disabled
+    service = build("customsearch", "v1", developerKey=api_key, cache_discovery=False)
 
     # Perform the search
     res = service.cse().list(q=query, cx=cse_id).execute()

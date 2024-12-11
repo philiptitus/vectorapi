@@ -3,7 +3,7 @@ from django.conf import settings
 
 def get_youtube_links(search_query, max_results=5):
     api_key = settings.YOUTUBE_API_KEY  # Replace with your YouTube Data API key
-    youtube = build("youtube", "v3", developerKey=api_key)
+    youtube = build("youtube", "v3", developerKey=api_key, cache_discovery=False)  # Disable cache
 
     # Search for videos matching the query
     search_response = youtube.search().list(
